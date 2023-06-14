@@ -1,0 +1,64 @@
+[package]
+name = "msecret"
+version = "0.1.0"
+description = """
+A reference implementation of MSecret key derivation, written in pure Rust.
+Includes a helpful command-line utility.
+"""
+authors = ["Robert Quattlebaum"]
+license = "Apache-2.0"
+documentation = "https://docs.rs/msecret"
+repository = "https://github.com/darconeous/msecret"
+readme = "README.md"
+categories = ["cryptography"]
+edition = "2021"
+
+[features]
+"default" = ["openssl", "share", "bin"]
+"share" = ["gf256", "crc"]
+"bin" = ["rpassword", "shellwords", "rustyline", "mnemonic", "clap" ]
+"longtest" = []
+
+[dependencies]
+openssl = { version = "0.10", features = ["vendored"], optional = true }
+gf256 = { version = "0.3", features = ["shamir", "thread-rng"], optional = true }
+crc = { version = "3", optional = true }
+
+anyhow = "1"
+base64 = "0.21"
+bs58 = "0.5"
+digest = "0.10"
+hex = "0.4"
+hex-literal = "0.4"
+hkdf = { version = "0.12" }
+hmac = { version = "0.12" }
+num-bigint-dig = { version = ">=0.8.4", features = ["prime"] }
+num-integer = "0.1"
+num-traits = "0.2"
+p256 = { version = "0.13", features = ["ecdh","ecdsa"]}
+rand = "0.8"
+rsa = { version = "0.9", features = ["sha2"] }
+rust-argon2 = "1"
+sha2 = { version = "0.10" }
+signature = { version = ">=2.0" }
+typenum = "1"
+elliptic-curve = { version = "0.13", default-features = false, features = ["hazmat", "sec1", "pem"] }
+ed25519-dalek = { version = "2.0.0-rc.3", features = ["digest", "pkcs8", "pem", "zeroize"] }
+x25519-dalek = { version = "2.0.0-rc.3", features = ["static_secrets"] }
+zeroize = { version = "1.6", features = ["zeroize_derive"] }
+
+# Needed for Bitcoin support.
+ripemd = "0.1"
+k256 = { version = "0.13", features = ["ecdh","ecdsa"]}
+
+# Only needed for the binary.
+rpassword = { version = "7", optional = true }
+shellwords = { version = "1.0.0", optional = true }
+rustyline = { version = "11", features = ["derive"], optional = true }
+mnemonic = { version = "1", optional = true }
+clap = { version = "4.3", features = ["derive"], optional = true }
+
+[[bin]]
+name = "msecretctl"
+path = "src/tool/main.rs"
+required-features = ["bin"]
