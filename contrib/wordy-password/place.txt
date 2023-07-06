@@ -1,0 +1,140 @@
+Afghanistan
+Africa
+Alabama
+Alaska
+Alexandria
+America
+Antarctica
+Arizona
+Arkansas
+Atlanta
+Baghdad
+Bangkok
+Bangladesh
+Barcelona
+Beijing
+Buenos Aires
+Burma
+Cairo
+California
+Chicago
+China
+Colombia
+Colorado
+Congo
+Connecticut
+Dallas
+Delaware
+Delhi
+England
+Florida
+France
+Georgia
+Germany
+Ghana
+here
+Harbin
+Hawaii
+Hong Kong
+Houston
+Idaho
+Illinois
+India
+Indiana
+Indonesia
+Iowa
+Iran
+Iraq
+Israel
+Istanbul
+Italy
+Jakarta
+Japan
+Kansas
+Karachi
+Kentucky
+Kenya
+Korea
+Lagos
+Lima
+London
+Los Angeles
+Louisiana
+Madrid
+Maine
+Malaysia
+Manila
+Maryland
+Massachusetts
+Mexico City
+Miami
+Michigan
+Minnesota
+Mississippi
+Missouri
+Montana
+Morocco
+Moscow
+Mumbai
+Myanmar
+Nebraska
+Nevada
+New Hampshire
+New Jersey
+New Mexico
+New York
+New York
+Nigeria
+North America
+North Carolina
+North Dakota
+North Korea
+Norway
+Ohio
+Oklahoma
+Oregon
+Osaka
+Pakistan
+Paris
+Pennsylvania
+Peru
+Philadelphia
+Philippines
+Rhode Island
+Romania
+Saint Petersburg
+Santiago
+Saudi Arabia
+Seoul
+Shanghai
+Singapore
+South Africa
+South America
+South Carolina
+South Dakota
+South Korea
+Sweden
+Syria
+Taiwan
+Tanzania
+Tehran
+Tennessee
+Texas
+Thailand
+Thursday
+Tokyo
+Toronto
+Tuesday
+Turkey
+Uganda
+Ukraine
+United Kingdom
+Utah
+Uzbekistan
+Venezuela
+Vermont
+Virginia
+Washington
+West Virginia
+Wisconsin
+Wyoming
