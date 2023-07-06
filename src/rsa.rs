@@ -679,7 +679,7 @@ mod tests {
         let hash = hex::encode(hash.finalize().as_slice());
         assert_eq!(
             hash,
-            "70958a58386f7f63b3c4ac5580c5fd7eb3b3813fe10681f09687e2a28e17fa89"
+            "27259c9b55d85aa1b60259308c7e802a7c13cf94fb4e74f10db4b6d1f17727e9"
         );
     }
 
@@ -703,7 +703,7 @@ mod tests {
         let hash = hex::encode(hash.finalize().as_slice());
         assert_eq!(
             hash,
-            "70958a58386f7f63b3c4ac5580c5fd7eb3b3813fe10681f09687e2a28e17fa89"
+            "27259c9b55d85aa1b60259308c7e802a7c13cf94fb4e74f10db4b6d1f17727e9"
         );
     }
 
