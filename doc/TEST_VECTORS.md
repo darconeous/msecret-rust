@@ -358,22 +358,22 @@ MSecret Passwords
 Secret: `0000000000000000000000000000000000000000000000000000000000000000`
 
  * v1: `XMMQ-KJK9-PEWC-578C-KLL3`
- * v2: `4.92692Ghmww`
+ * v2: `4.92692/Gmwwfw`
 
 Secret: `3bc1bf8f24ebcd813c4136b9ab3e9f26d50b4da59cfac6c169db905259832e84`
 
  * v1: `YCCQ-WLCX-QUNX-CULR-WQAW`
- * v2: `48.8&Eugygku`
+ * v2: `48.8&65!Hgkuus`
 
 Secret: `af2cbf24a232eb06eb48072e42cbaa7fc65342e0aabb6801d35ecc08bbbef734`
 
  * v1: `46X3-HRYJ-ENYH-JRHQ-GNHL`
- * v2: `otafpR$..3.!`
+ * v2: `otafG7$..3.!!@`
 
 Secret: `1a31d3ccabd87968d2f76f2a8d382c5aa8d88f897d57687cd945b1f83e906fc5`
 
  * v1: `LLRN-EU6J-Y53E-67WK-JGNJ`
- * v2: `/$4Ubwatqfqc`
+ * v2: `/$464::Cqfqcdm`
 
 MSecret Derivation from Passphrase
 ----------------------------------

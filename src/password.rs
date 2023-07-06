@@ -17,7 +17,7 @@
 use crate::prelude_internal::*;
 
 pub trait ExtractPassword {
-    /// Generates a very strong, easy-to-read password.
+    /// Generates a strong (~91 bits of entropy) password optimized for readability.
     ///
     /// Despite being easy to read, it is not necessarily easy to type on a cell phone,
     /// making it not ideal for things like WiFi passwords.
@@ -26,9 +26,10 @@ pub trait ExtractPassword {
     /// to numbers, upper-case letters, and dashes.
     fn extract_password_v1(&self) -> Result<String>;
 
-    /// Generates a medium-strength password that is optimized for being typed on phone keyboards.
+    /// Generates a medium-strength (~60 bits of entropy) password that is optimized for being
+    /// typed on phone keyboards.
     ///
-    /// The generated password is always 12 characters long. Commonly-confused characters are
+    /// The generated password is always 14 characters long. Commonly-confused characters are
     /// avoided.
     ///
     /// The algorithm tries to avoid swapping between letters and numbers/symbols too frequently.
@@ -93,7 +94,7 @@ impl ExtractPassword for Secret {
             '@',
         ];
 
-        let len = 12usize;
+        let len = 14usize;
         let minbeforeswap = 3;
 
         loop {
@@ -188,24 +189,25 @@ mod tests {
 
     #[test]
     fn test_password_v2() {
-        assert_eq!(&Secret::ZERO.extract_password_v2().unwrap(), "4.92692Ghmww");
+        assert_eq!(
+            &Secret::ZERO.extract_password_v2().unwrap(),
+            "4.92692/Gmwwfw"
+        );
         assert_eq!(
             &Secret::ZERO
                 .subsecret_from_label("0")
                 .unwrap()
                 .extract_password_v2()
                 .unwrap(),
-            "qbgC'92@&'::"
+            "?:&.$:4/Hifteo"
         );
-
-        // This next one should trigger a "retry".
         assert_eq!(
             &Secret::ZERO
                 .subsecret_from_label("5")
                 .unwrap()
                 .extract_password_v2()
                 .unwrap(),
-            "&626Xpxskzze"
+            "uzfpxskA&8?9'@"
         );
     }
 }

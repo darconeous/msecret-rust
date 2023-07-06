@@ -383,7 +383,7 @@ fn test_password() {
     output.clear();
 
     ToolArgs::process_line(&mut tool_state, "password v2", &mut output).unwrap();
-    assert_eq!(std::str::from_utf8(&output).unwrap(), "4.92692Ghmww");
+    assert_eq!(std::str::from_utf8(&output).unwrap(), "4.92692/Gmwwfw");
     output.clear();
 }
 
@@ -404,7 +404,7 @@ fn test_test_vectors() {
     let hashstr = hex::encode(sha2::Sha256::digest(output.as_slice()).as_slice());
     assert_eq!(
         hashstr.as_str(),
-        "9493cfc03e036fbe373e09901dbb03c576b51c7049368f2c60e2898e7bc61ef4"
+        "a69fe609e8fa41de1272bc6d37ab1d9a7ceb93e7a6c600205fae72de1eddbc48"
     );
     output.clear();
 }

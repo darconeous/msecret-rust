@@ -1,6 +1,6 @@
 [package]
 name = "msecret"
-version = "0.1.0"
+version = "0.1.1"
 description = """
 A reference implementation of MSecret key derivation, written in pure Rust.
 Includes a helpful command-line utility.
