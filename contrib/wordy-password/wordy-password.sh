@@ -90,7 +90,7 @@ random_number() {
 	ENTROPY=`cat $COMBINATION_COUNT_FILE`
 	echo "$ENTROPY * $max" | bc > $COMBINATION_COUNT_FILE
 
-	echo $((1+`msecretctl --rand-secret int $((max-1)) -f dec`))
+	msecretctl --rand-secret int $max --skip-zero
 }
 
 random_verb() {

@@ -21,6 +21,10 @@ pub struct CommandInt {
     #[arg(value_name = "MAX-VALUE")]
     max: String,
 
+    /// Use the interval `[1,max]` instead of `[0,max]`.
+    #[arg(long)]
+    skip_zero: bool,
+
     /// Format of the maximum value.
     #[arg(short = 'i', long, value_name = "FORMAT")]
     in_format: Option<BinFormat>,
@@ -47,8 +51,23 @@ impl CommandInt {
         };
         let out_format = self.out_format.unwrap_or(in_format);
 
-        let max = in_format.try_from_str(&self.max)?;
-        let bytes = secret.extract_int_to_be_vec(&max)?;
+        let bytes = if self.skip_zero {
+            use num_traits::Zero;
+            let max = in_format.try_from_str(&self.max)?;
+            let max = BigUint::from_bytes_be(&max);
+
+            ensure!(
+                !max.is_zero(),
+                "Max value can't be zero when used with `--skip_zero`."
+            );
+
+            let one = BigUint::from(1u64);
+            let out: BigUint = secret.extract_big_uint(&(max - &one))? + &one;
+            out.to_bytes_be()
+        } else {
+            let max = in_format.try_from_str(&self.max)?;
+            secret.extract_int_to_be_vec(&max)?
+        };
 
         let keypath = tool_state.get_keypath()?;
 

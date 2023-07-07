@@ -266,6 +266,10 @@ fn test_int() {
     assert_eq!(std::str::from_utf8(&output).unwrap(), "6542");
     output.clear();
 
+    ToolArgs::process_line(&mut tool_state, "int 9999 --skip-zero", &mut output).unwrap();
+    assert_eq!(std::str::from_utf8(&output).unwrap(), "4061");
+    output.clear();
+
     ToolArgs::process_line(&mut tool_state, "int 9999999999999999", &mut output).unwrap();
     assert_eq!(std::str::from_utf8(&output).unwrap(), "419876651106371");
     output.clear();

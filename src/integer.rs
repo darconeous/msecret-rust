@@ -116,6 +116,11 @@ impl ExtractInteger for Secret {
             max = &max[1..];
         }
 
+        if max.is_empty() {
+            // A random integer between zero and zero is going to be zero.
+            return Ok(());
+        }
+
         // Helper function for calculating the enclosing mask
         // for a given value. For example, for the value 48,
         // the output would be 63. We use this as a performance
