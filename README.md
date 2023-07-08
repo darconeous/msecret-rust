@@ -257,7 +257,7 @@ Apache 2.0; see [`LICENSE`](LICENSE) for details.
 [build-image]: https://github.com/darconeous/msecret-rust/workflows/CI/badge.svg
 [build-link]: https://github.com/darconeous/msecret-rust/actions?query=workflow%3ACI+branch%3Amain
 [msrv-image]: https://img.shields.io/badge/rustc-1.70+-blue.svg
-[deps-image]: https://deps.rs/crate/msecret/0.1.1/status.svg
-[deps-link]: https://deps.rs/crate/msecret/0.1.1
+[deps-image]: https://deps.rs/crate/msecret/0.1.2/status.svg
+[deps-link]: https://deps.rs/crate/msecret/
 
 [//]: # (links)
