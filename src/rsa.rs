@@ -56,7 +56,7 @@ use zeroize::Zeroizing;
 /// The algorithm is largely based on the implementation
 /// from OpenSSL's `RSA_generate_key()` method, as seen here:
 ///
-/// https://opensource.apple.com/source/OpenSSL097/OpenSSL097-16/openssl/crypto/rsa/rsa_gen.c
+/// <https://opensource.apple.com/source/OpenSSL097/OpenSSL097-16/openssl/crypto/rsa/rsa_gen.c>
 ///
 /// This is a straightforward algorithm that avoids doing the
 /// sorts of checks that are extremely unlikely to ever be

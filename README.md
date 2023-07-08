@@ -1,12 +1,21 @@
-# MSecret — Experimental Key Derivation Utility #
+MSecret — Experimental Key Derivation Utility
+=============================================
+
+[![crates.io][crate-image]][crate-link]
+[![Build Status][build-image]][build-link]
+[![Documentation][doc-image]][doc-link]
+[![dependency status][deps-image]][deps-link]
+![MSRV][msrv-image]
+
+-------
 
 This project includes both:
 
 1.  A [specification][MSECRET] (with [test vectors][VECTORS]) for deterministically deriving
     various types of data (bytes, integers, primes, etc.) and
     cryptographic keys (RSA, ECC, etc.) from a symmetric master secret.
-2.  A reference implementation written in Rust, including a helpful
-    command-line utility and library.
+2.  A reference implementation written in Rust, including a [helpful
+    command-line utility](#command-line-tool) and [library][doc-link].
 
 [MSECRET]: doc/MSECRET.md
 [VECTORS]: doc/TEST_VECTORS.md
@@ -104,14 +113,10 @@ To update an existing installation, use rustup:
 $ rustup update
 ```
 
-Then you can check out a copy of the git repository, test, build, and
-install:
+Then you can grab the latest version of `msecretctl`:
 
 ```shell
-$ git clone https://github.com/darconeous/msecret-rust
-$ cd msecret-rust
-$ cargo test --release
-$ cargo install --path .
+$ cargo install msecret
 ```
 
 You should now be able to use the `msecretctl` tool.
@@ -242,3 +247,17 @@ UIVkSB54IZGHuuQKkYwfCjT69zDGVRwt7A==
 # License
 
 Apache 2.0; see [`LICENSE`](LICENSE) for details.
+
+[//]: # (badges)
+
+[crate-image]: https://buildstats.info/crate/msecret
+[crate-link]: https://crates.io/crates/msecret
+[doc-image]: https://docs.rs/msecret/badge.svg
+[doc-link]: https://docs.rs/msecret
+[build-image]: https://github.com/darconeous/msecret-rust/workflows/CI/badge.svg
+[build-link]: https://github.com/darconeous/msecret-rust/actions?query=workflow%3ACI+branch%3Amain
+[msrv-image]: https://img.shields.io/badge/rustc-1.70+-blue.svg
+[deps-image]: https://deps.rs/crate/msecret/0.1.1/status.svg
+[deps-link]: https://deps.rs/crate/msecret/0.1.1
+
+[//]: # (links)

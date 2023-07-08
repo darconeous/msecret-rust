@@ -11,16 +11,17 @@ documentation = "https://docs.rs/msecret"
 repository = "https://github.com/darconeous/msecret"
 readme = "README.md"
 categories = ["cryptography"]
+rust-version = "1.70"
 edition = "2021"
 
 [features]
-"default" = ["openssl", "share", "bin"]
 "share" = ["gf256", "crc"]
 "bin" = ["rpassword", "shellwords", "rustyline", "mnemonic", "clap" ]
 "longtest" = []
+"default" = ["openssl", "share", "bin"]
 
 [dependencies]
-openssl = { version = "0.10", features = ["vendored"], optional = true }
+openssl = { version = ">=0.10.55", features = ["vendored"], optional = true }
 gf256 = { version = "0.3", features = ["shamir", "thread-rng"], optional = true }
 crc = { version = "3", optional = true }
 

@@ -127,7 +127,7 @@ impl Secret {
         Ok(())
     }
 
-    /// Recovers a secret from `k` of the shares previously split using [`split_shares()`].
+    /// Recovers a secret from `k` of the shares previously split using [`Secret::split_shares()`].
     pub fn try_from_shares<S: AsRef<[u8]>>(shares: &[S]) -> Result<Secret> {
         ensure!(!shares.is_empty(), "No shares given");
 
