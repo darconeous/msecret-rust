@@ -215,19 +215,19 @@ fn test_rsa() {
     );
     output.clear();
 
-    ToolArgs::process_line(&mut tool_state, "rsa public -m 1024", &mut output).unwrap();
+    ToolArgs::process_line(&mut tool_state, "rsa public -m 1024 -f pem", &mut output).unwrap();
     let hashstr = hex::encode(sha2::Sha256::digest(output.as_slice()).as_slice());
     assert_eq!(
         hashstr.as_str(),
-        "f3877ae72083aa9414aa1282cdcb58edd9374901d1396ec45d76f75e6fab7709"
+        "7dd8fd5cc3cf976f02a3bb97858d3b4db39f06a2bda68e8247ee01e2d012a670"
     );
     output.clear();
 
-    ToolArgs::process_line(&mut tool_state, "rsa private -m 1024", &mut output).unwrap();
+    ToolArgs::process_line(&mut tool_state, "rsa private -m 1024 -f pem", &mut output).unwrap();
     let hashstr = hex::encode(sha2::Sha256::digest(output.as_slice()).as_slice());
     assert_eq!(
         hashstr.as_str(),
-        "d3aefa2e866a62e20507fcbcad2c3c3cd034d05cd312c5ae312b985f96ea27f7"
+        "b4126af3ebd6abc397ae7f1a31a0ed32f8a0dde66da34abb7b9b6ef55b1fb2fd"
     );
     output.clear();
 

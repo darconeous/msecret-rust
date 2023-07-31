@@ -24,6 +24,8 @@ use ::openssl::{ec::EcGroup, nid::Nid};
 
 use ed25519_dalek::ed25519;
 use hex_literal::hex;
+use openssl::symm::Cipher;
+use rand::rngs::OsRng;
 
 #[derive(Debug, clap::Subcommand, Clone)]
 pub enum CommandEcc {
@@ -32,6 +34,7 @@ pub enum CommandEcc {
 
     /// Generate the public key for the given curve.
     Public {
+        /// The name of the curve to use.
         curve: String,
 
         #[arg(short = 'o', long = "output", value_name = "FILENAME")]
@@ -43,6 +46,7 @@ pub enum CommandEcc {
 
     /// Generate the private key for the given curve.
     Private {
+        /// The name of the curve to use.
         curve: String,
 
         #[arg(short = 'o', long = "output", value_name = "FILENAME")]
@@ -50,6 +54,10 @@ pub enum CommandEcc {
 
         #[arg(short, long)]
         format: Option<EccFormat>,
+
+        /// Encrypt the private key with the given password.
+        #[arg(long)]
+        password: Option<String>,
     },
 
     /// Sign the given data using ECDSA/EdDSA.
@@ -65,7 +73,7 @@ pub enum CommandEcc {
         in_format: BinFormat,
 
         /// The data to sign, or (if prehash is set) the hash to sign.
-        #[arg(value_name = "DATA-HEX")]
+        #[arg(value_name = "DATA")]
         data: String,
 
         #[arg(short = 'f', long, value_name = "FORMAT", default_value = "hex")]
@@ -82,7 +90,7 @@ pub enum CommandEcc {
         prehash: bool,
 
         /// The data to verify, or (if prehash is set) the hash to verify.
-        #[arg(value_name = "DATA-HEX")]
+        #[arg(value_name = "DATA")]
         data: String,
 
         #[arg(value_name = "SIGNATURE-HEX")]
@@ -94,7 +102,7 @@ pub enum CommandEcc {
 #[cfg(feature = "openssl")]
 fn ec_group_from_str<T: AsRef<str>>(curve: T) -> Result<EcGroup, Error> {
     let mut curve = curve.as_ref();
-    if curve == "p256" || curve == "p-256" || curve == "nistp256" {
+    if curve == "p256" || curve == "p-256" || curve == "nistp256" || curve == "secp256r1" {
         // Allow the "p256" shorthand.
         curve = "prime256v1";
     }
@@ -126,7 +134,7 @@ fn ec_group_from_str<T: AsRef<str>>(curve: T) -> Result<EcGroup, Error> {
 }
 
 /// Makes a public SSH key from a `ed25519_dalek::VerifyingKey`.
-fn ed25519_public_to_openssl(key: &ed25519_dalek::VerifyingKey) -> Result<String, Error> {
+fn ed25519_public_to_openssh(key: &ed25519_dalek::VerifyingKey) -> Result<String, Error> {
     let mut vec = hex!("0000000b7373682d6564323535313900000020").to_vec();
     vec.extend_from_slice(key.as_bytes().as_slice());
     Ok(format!(
@@ -136,7 +144,7 @@ fn ed25519_public_to_openssl(key: &ed25519_dalek::VerifyingKey) -> Result<String
 }
 
 /// Makes a private OpenSSH key from a `ed25519_dalek::SigningKey`.
-fn ed25519_private_to_openssl(private_key: &ed25519_dalek::SigningKey) -> Result<String, Error> {
+fn ed25519_private_to_openssh(private_key: &ed25519_dalek::SigningKey) -> Result<String, Error> {
     let public_key: ed25519_dalek::VerifyingKey = private_key.into();
     let pub64 = public_key.as_bytes().as_slice();
     let priv64 = private_key.to_bytes();
@@ -196,7 +204,7 @@ impl CommandEcc {
                 let ret = match format.unwrap_or(EccFormat::Pkcs8) {
                     EccFormat::BinFormat(format) => format.to_bytes(key.as_bytes())?,
                     EccFormat::Ssh => {
-                        let ssh_key = ed25519_public_to_openssl(&key)?;
+                        let ssh_key = ed25519_public_to_openssh(&key)?;
                         format!("{} msecret-{}", ssh_key, secret.id())
                             .as_bytes()
                             .to_vec()
@@ -229,16 +237,27 @@ impl CommandEcc {
                 curve,
                 output,
                 format,
+                password,
             } if curve == "ed25519" => {
                 let secret = tool_state.current_secret()?;
                 let key = secret.extract_ed25519_private()?;
 
                 let ret = match format.unwrap_or(EccFormat::Pkcs8) {
                     EccFormat::BinFormat(format) => format.to_bytes(&key.to_bytes())?,
-                    EccFormat::Ssh => ed25519_private_to_openssl(&key)?.as_bytes().to_vec(),
+                    EccFormat::Ssh => ed25519_private_to_openssh(&key)?.as_bytes().to_vec(),
                     EccFormat::Pkcs8 => {
                         use ed25519_dalek::pkcs8::EncodePrivateKey;
-                        key.to_pkcs8_pem(Default::default())?.as_bytes().to_vec()
+                        if let Some(password) = password.as_ref() {
+                            key.to_pkcs8_encrypted_pem(OsRng, password, Default::default())?
+                                .as_bytes()
+                                .to_vec()
+                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                            key.to_pkcs8_encrypted_pem(OsRng, password, Default::default())?
+                                .as_bytes()
+                                .to_vec()
+                        } else {
+                            key.to_pkcs8_pem(Default::default())?.as_bytes().to_vec()
+                        }
                     }
                 };
 
@@ -291,6 +310,7 @@ impl CommandEcc {
                 curve,
                 output,
                 format,
+                password: None,
             } if curve == "x25519" => {
                 let secret = tool_state.current_secret()?;
                 let key = secret.extract_x25519_private()?;
@@ -361,6 +381,7 @@ impl CommandEcc {
                 curve,
                 output,
                 format,
+                password,
             } => {
                 let secret = tool_state.current_secret()?;
                 let group = ec_group_from_str(curve)?;
@@ -371,7 +392,21 @@ impl CommandEcc {
                         format.to_bytes(&eckey.private_key().to_vec_padded(32)?)?
                     }
                     EccFormat::Ssh => bail!("SSH not supported for this curve"),
-                    EccFormat::Pkcs8 => eckey.private_key_to_pem()?,
+                    EccFormat::Pkcs8 => {
+                        if let Some(password) = password.as_ref() {
+                            eckey.private_key_to_pem_passphrase(
+                                Cipher::aes_256_cbc(),
+                                password.as_bytes(),
+                            )?
+                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                            eckey.private_key_to_pem_passphrase(
+                                Cipher::aes_256_cbc(),
+                                password.as_bytes(),
+                            )?
+                        } else {
+                            eckey.private_key_to_pem()?
+                        }
+                    }
                 };
 
                 let keypath = tool_state.get_keypath()?;

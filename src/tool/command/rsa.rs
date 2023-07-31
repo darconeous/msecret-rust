@@ -15,6 +15,7 @@
 // limitations under the License.
 
 use super::*;
+use rand::rngs::OsRng;
 use zeroize::Zeroizing;
 
 #[derive(Debug, clap::Subcommand)]
@@ -43,6 +44,10 @@ pub enum CommandRsa {
 
         #[arg(short, long, default_value = "pem")]
         format: RsaFormat,
+
+        /// Encrypt the private key with the given password.
+        #[arg(long)]
+        password: Option<String>,
     },
 
     /// Encrypts data using the RSA public key.
@@ -137,7 +142,7 @@ impl CommandRsa {
                 output,
                 format,
             } => {
-                use ::rsa::pkcs8::{EncodePublicKey, LineEnding};
+                use ::rsa::pkcs8::EncodePublicKey;
                 let rsa = secret.extract_rsa_v1_public(*mod_bits)?;
 
                 let keypath = tool_state.get_keypath()?;
@@ -148,7 +153,7 @@ impl CommandRsa {
                     .add_primitive(format!("RSA-{}", mod_bits));
 
                 let ret = match format {
-                    RsaFormat::Pem => rsa.to_public_key_pem(LineEnding::CRLF)?.into_bytes(),
+                    RsaFormat::Pem => rsa.to_public_key_pem(Default::default())?.into_bytes(),
                     RsaFormat::Der => rsa.to_public_key_der()?.to_vec(),
                     RsaFormat::Debug => {
                         use ::rsa::traits::PublicKeyParts;
@@ -169,8 +174,9 @@ impl CommandRsa {
                 mod_bits,
                 output,
                 format,
+                password,
             } => {
-                use ::rsa::pkcs8::{EncodePrivateKey, LineEnding};
+                use ::rsa::pkcs8::EncodePrivateKey;
                 let rsa = secret.extract_rsa_v1_private(*mod_bits)?;
 
                 let keypath = tool_state.get_keypath()?;
@@ -182,9 +188,35 @@ impl CommandRsa {
 
                 let ret = match format {
                     RsaFormat::Pem => {
-                        Zeroizing::new(rsa.to_pkcs8_pem(LineEnding::CRLF)?.to_string().into_bytes())
+                        if let Some(password) = password.as_ref() {
+                            Zeroizing::new(
+                                rsa.to_pkcs8_encrypted_pem(OsRng, password, Default::default())?
+                                    .to_string()
+                                    .into_bytes(),
+                            )
+                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                            Zeroizing::new(
+                                rsa.to_pkcs8_encrypted_pem(OsRng, password, Default::default())?
+                                    .to_string()
+                                    .into_bytes(),
+                            )
+                        } else {
+                            Zeroizing::new(
+                                rsa.to_pkcs8_pem(Default::default())?
+                                    .to_string()
+                                    .into_bytes(),
+                            )
+                        }
                     }
-                    RsaFormat::Der => rsa.to_pkcs8_der()?.to_bytes(),
+                    RsaFormat::Der => {
+                        if let Some(password) = password.as_ref() {
+                            rsa.to_pkcs8_encrypted_der(OsRng, password)?.to_bytes()
+                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                            rsa.to_pkcs8_encrypted_der(OsRng, password)?.to_bytes()
+                        } else {
+                            rsa.to_pkcs8_der()?.to_bytes()
+                        }
+                    }
                     RsaFormat::Debug => {
                         use ::rsa::traits::PrivateKeyParts;
                         use ::rsa::traits::PublicKeyParts;

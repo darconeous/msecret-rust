@@ -48,12 +48,27 @@ in one of the following ways:
 The value of a Secret is intended to be suitable for direct use
 as the PRK to HKDF-Expand.
 
+## Identifying Secrets
+
+A secret can be identified by its *secret-id*. The *secret-id* can be
+calculated from the secret as follows:
+
+* Calculate the `HMAC<SHA256>` of the secret using the key `"\x00SecretId"`.
+  (That is, the ASCII string `SecretId` with a zero byte prepended to it)
+* Truncate the resulting value to first 16 bytes.
+* Base58-encode the resulting 16 byte value.
+
+For example, the secret-id for the all-zeros secret is `DCUUx9UhnhJErcndchjMsZ`.
+
 ## Mutating Secrets
 
 In order to facilitate domain separation, Secrets may be mutated
 with a salt or "label" using `HKDF-Extract<SHA256>`, where the
 `IKM` is the original Secret and the `salt` is supplied as a
-parameter of the mutation.
+parameter of the mutation. The result is the new derived secret.
+
+Note that `HKDF-Extract<SHA256>(IKM,salt)` is defined to be the
+same as `HMAC<SHA256>(msg:IKM,key:salt)`.
 
 ## Deriving Pseudo-Random Byte Strings
 
@@ -116,7 +131,7 @@ following:
 4. Perform a lexicographical comparison between `out` and `max`. If `out`
    comes after `max`, then go to step 1.
 
-At this out `out` contains our derived integer in big-endian byte form,
+At this point `out` contains our derived integer in big-endian byte form,
 and may then be converted to whatever other sort of integer representation
 you might need.
 
@@ -292,9 +307,41 @@ The output tag is used directly as the Secret.
 
 [ARGON2]: https://www.rfc-editor.org/rfc/rfc9106.html
 
-## Splitting Secrets into Shares Using SSS-GF(256)
+## Splitting Secrets into Shares
 
-TODO: Writeme!
+First, a CRC-8 is calculated over the secret and appended
+to the secret. The specific CRC that is used is
+[CRC_8_BLUETOOTH](https://docs.rs/crc-catalog/latest/crc_catalog/constant.CRC_8_BLUETOOTH.html).
+The resulting value is 33 bytes long.
+
+This secret is then split into shares using the algorithm outlined
+in the section below, each share being 34 bytes long.
+
+For each share, the CRC-8 is calculated (same as above) and also
+appended. The resulting shares are each 35 bytes long. The shares
+are then encoded as desired (Base58 is a common encoding).
+
+When decoding, the CRC of each individual share should be verified.
+Once combined, the CRC of the final secret should also be verified.
+
+The CRCs help to detect typos for individual shares and also
+to help determine that the final secret is valid with some small
+degree of confidence. This is for convenience only. Successful
+decoding is no substitute for verifying that the resulting secret
+matches the expected secret-id.
+
+### `SSS-GF(256)`
+
+The specific SSS-FG(256) algorithm being employed is the same
+algorithm being used by the following independent projects:
+
+* https://docs.rs/gf256/latest/gf256/shamir/index.html
+* https://github.com/jcushman/libgfshare
+
+#### See also
+
+* [draft-mcgrew-tss-03](https://datatracker.ietf.org/doc/html/draft-mcgrew-tss-03):
+  Not being used here, but mentioning it for later consideration.
 
 ## Test Vectors
 
