@@ -113,10 +113,7 @@ impl KeyMap {
     ) -> Option<&mut KeyMap> {
         let mut iter = iter.into_iter();
         if let Some(label) = iter.next() {
-            let keymap = self
-                .children
-                .entry(label.to_string())
-                .or_default();
+            let keymap = self.children.entry(label.to_string()).or_default();
             keymap.update_from_iter(iter)
         } else {
             Some(self)
