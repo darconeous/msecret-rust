@@ -116,7 +116,7 @@ impl KeyMap {
             let keymap = self
                 .children
                 .entry(label.to_string())
-                .or_insert(KeyMap::default());
+                .or_default();
             keymap.update_from_iter(iter)
         } else {
             Some(self)
