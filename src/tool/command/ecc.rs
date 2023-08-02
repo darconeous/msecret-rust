@@ -251,7 +251,7 @@ impl CommandEcc {
                             key.to_pkcs8_encrypted_pem(OsRng, password, Default::default())?
                                 .as_bytes()
                                 .to_vec()
-                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                        } else if let Ok(password) = std::env::var("PKCS8_PASSWORD") {
                             key.to_pkcs8_encrypted_pem(OsRng, password, Default::default())?
                                 .as_bytes()
                                 .to_vec()
@@ -398,7 +398,7 @@ impl CommandEcc {
                                 Cipher::aes_256_cbc(),
                                 password.as_bytes(),
                             )?
-                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                        } else if let Ok(password) = std::env::var("PKCS8_PASSWORD") {
                             eckey.private_key_to_pem_passphrase(
                                 Cipher::aes_256_cbc(),
                                 password.as_bytes(),

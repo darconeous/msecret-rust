@@ -194,7 +194,7 @@ impl CommandRsa {
                                     .to_string()
                                     .into_bytes(),
                             )
-                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                        } else if let Ok(password) = std::env::var("PKCS8_PASSWORD") {
                             Zeroizing::new(
                                 rsa.to_pkcs8_encrypted_pem(OsRng, password, Default::default())?
                                     .to_string()
@@ -211,7 +211,7 @@ impl CommandRsa {
                     RsaFormat::Der => {
                         if let Some(password) = password.as_ref() {
                             rsa.to_pkcs8_encrypted_der(OsRng, password)?.to_bytes()
-                        } else if let Some(password) = std::env::var("PKCS8_PASSWORD").ok() {
+                        } else if let Ok(password) = std::env::var("PKCS8_PASSWORD") {
                             rsa.to_pkcs8_encrypted_der(OsRng, password)?.to_bytes()
                         } else {
                             rsa.to_pkcs8_der()?.to_bytes()
