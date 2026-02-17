@@ -19,7 +19,7 @@ extern crate num_bigint_dig as num_bigint;
 use std::io::{stdout, IsTerminal, Write};
 use std::process::exit;
 
-use anyhow::{ensure, Error};
+use anyhow::{bail, ensure, Error};
 use clap::Parser;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
@@ -59,8 +59,10 @@ pub struct ToolArgs {
     pub rand_secret: bool,
 
     /// Initial secret is generated from a passphrase read in from stdin.
-    #[arg(long)]
-    pub passphrase: bool,
+    /// Optionally specify a SECRET_ID to verify the derived secret instead of
+    /// asking for the passphrase twice. Up to three attempts are allowed.
+    #[arg(long, num_args(0..=1), require_equals = true, value_name = "SECRET_ID")]
+    pub passphrase: Option<Option<SecretId>>,
 
     /// Initial keypath, like `/1/CA/com.example/sig`
     #[arg(value_name = "KEYPATH")]
@@ -159,7 +161,7 @@ impl ToolArgs {
                 "Can't specify both --secret and --rand-secret at same time!"
             );
             ensure!(
-                !self.passphrase,
+                self.passphrase.is_none(),
                 "Can't specify both --secret and --passphrase at same time!"
             );
             tool_state.import_root(&secret)?;
@@ -169,27 +171,49 @@ impl ToolArgs {
                 "Can't specify both --secret-file and --rand-secret at same time!"
             );
             ensure!(
-                !self.passphrase,
+                self.passphrase.is_none(),
                 "Can't specify both --secret-file and --passphrase at same time!"
             );
             tool_state.load(secret_file.as_ref())?;
         } else if self.rand_secret {
             ensure!(
-                !self.passphrase,
+                self.passphrase.is_none(),
                 "Can't specify both --rand-secret and --passphrase at same time!"
             );
             tool_state.generate()?;
-        } else if self.passphrase {
-            let passphrase = rpassword::prompt_password("Enter passphrase: ")?;
-
-            ensure!(!passphrase.is_empty(), "Passphrase was empty.");
-
-            let passphrase_check = rpassword::prompt_password("Verify passphrase: ")?;
-
-            ensure!(passphrase == passphrase_check, "Passphrases do not match.");
-
-            tool_state.import_root(&Secret::from_passphrase(passphrase))?;
-
+        } else if let Some(passphrase_secret_id) = self.passphrase.as_ref() {
+            if let Some(expected_id) = passphrase_secret_id {
+                // Secret ID provided: verify instead of asking twice, up to 3 attempts.
+                let mut imported = false;
+                for attempt in 0..3usize {
+                    let passphrase = rpassword::prompt_password("Enter passphrase: ")?;
+                    ensure!(!passphrase.is_empty(), "Passphrase was empty.");
+                    let secret = Secret::from_passphrase(&passphrase);
+                    if secret.id() == *expected_id {
+                        tool_state.import_root(&secret)?;
+                        imported = true;
+                        break;
+                    }
+                    eprintln!(
+                        "Passphrase produces secret ID {}, expected {}.",
+                        secret.id(),
+                        expected_id
+                    );
+                    if attempt == 2 {
+                        bail!("Too many incorrect passphrase attempts");
+                    }
+                }
+                if !imported {
+                    bail!("Too many incorrect passphrase attempts");
+                }
+            } else {
+                // No secret ID: ask twice to confirm.
+                let passphrase = rpassword::prompt_password("Enter passphrase: ")?;
+                ensure!(!passphrase.is_empty(), "Passphrase was empty.");
+                let passphrase_check = rpassword::prompt_password("Verify passphrase: ")?;
+                ensure!(passphrase == passphrase_check, "Passphrases do not match.");
+                tool_state.import_root(&Secret::from_passphrase(passphrase))?;
+            }
             eprintln!("Imported {}", tool_state.current_secret()?.id());
         }
 

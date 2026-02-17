@@ -109,6 +109,7 @@ pub(crate) mod prelude_internal {
 }
 
 use crate::prelude_internal::*;
+use std::str::FromStr;
 
 /// Convenience return type.
 pub type Result<T = (), E = Error> = std::result::Result<T, E>;
@@ -161,6 +162,24 @@ impl Display for SecretId {
         // Kinda wasteful, but bs58 doesn't provide any good way to deal with this case
         // without a double allocation at the moment, so we will just deal with it.
         f.write_str(&self.to_string())
+    }
+}
+
+impl FromStr for SecretId {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let bytes = bs58::decode(s).into_vec()?;
+        if bytes.len() != Self::LEN {
+            bail!(
+                "SecretId has wrong length: expected {} bytes, got {}",
+                Self::LEN,
+                bytes.len()
+            );
+        }
+        let mut arr = [0u8; Self::LEN];
+        arr.copy_from_slice(&bytes);
+        Ok(SecretId(arr))
     }
 }
 

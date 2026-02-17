@@ -34,7 +34,17 @@ pub enum CommandSecret {
 
     /// Generates a secret derived from the given passphrase.
     /// If a passphrase is not provided in the command line, one will be prompted for.
-    Passphrase { passphrase: Option<String> },
+    ///
+    /// When --secret-id is given, the passphrase is verified against the expected
+    /// secret ID instead of asking for it twice. Up to three attempts are allowed.
+    Passphrase {
+        passphrase: Option<String>,
+
+        /// Expected secret ID. When provided, the entered passphrase is verified
+        /// against this ID rather than asking for the passphrase a second time.
+        #[arg(long, value_name = "SECRET_ID")]
+        secret_id: Option<SecretId>,
+    },
 
     /// Prints out the raw value of the subsecret at this keypath in hex.
     Export {
@@ -124,22 +134,59 @@ impl CommandSecret {
                 Ok(())
             }
 
-            CommandSecret::Passphrase { passphrase } => {
+            CommandSecret::Passphrase {
+                passphrase,
+                secret_id,
+            } => {
                 if let Some(passphrase) = passphrase.as_ref() {
-                    tool_state.import_root(&Secret::from_passphrase(passphrase))?;
+                    // Passphrase supplied on the command line.
+                    let secret = Secret::from_passphrase(passphrase);
+                    if let Some(expected_id) = secret_id {
+                        if secret.id() != *expected_id {
+                            bail!(
+                                "Passphrase produces secret ID {}, expected {}",
+                                secret.id(),
+                                expected_id
+                            );
+                        }
+                    }
+                    tool_state.import_root(&secret)?;
+                } else if let Some(expected_id) = secret_id {
+                    // Secret ID supplied: verify instead of asking twice.
+                    let mut imported = false;
+                    for attempt in 0..3usize {
+                        let passphrase = rpassword::prompt_password("Enter passphrase: ")?;
+                        if passphrase.is_empty() {
+                            return Ok(());
+                        }
+                        let secret = Secret::from_passphrase(&passphrase);
+                        if secret.id() == *expected_id {
+                            tool_state.import_root(&secret)?;
+                            imported = true;
+                            break;
+                        }
+                        eprintln!(
+                            "Passphrase produces secret ID {}, expected {}.",
+                            secret.id(),
+                            expected_id
+                        );
+                        if attempt == 2 {
+                            bail!("Too many incorrect passphrase attempts");
+                        }
+                    }
+                    if !imported {
+                        bail!("Too many incorrect passphrase attempts");
+                    }
                 } else {
+                    // No secret ID: ask twice to confirm.
                     let passphrase = rpassword::prompt_password("Enter passphrase: ")?;
-
                     if passphrase.is_empty() {
                         return Ok(());
                     }
-
                     let passphrase_check = rpassword::prompt_password("Verify passphrase: ")?;
-
                     if passphrase != passphrase_check {
                         bail!("Passphrases do not match");
                     }
-
                     tool_state.import_root(&Secret::from_passphrase(passphrase))?;
                 }
                 write!(out, "Imported {}", tool_state.current_secret()?.id())?;
