@@ -185,7 +185,7 @@ fn test_ecc_p256() {
     );
     output.clear();
 
-    #[cfg(openssl)]
+    #[cfg(feature = "openssl")]
     {
         ToolArgs::process_line(&mut tool_state, "ecc private p256 -f hex", &mut output).unwrap();
         assert_eq!(
