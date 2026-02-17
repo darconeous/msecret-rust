@@ -185,6 +185,8 @@ MAY be used instead.
     parameters from an RSA key can be computed from these
     values.
 
+### V1 Procedure
+
 The procedure for calculating a suitable prime number is designed
 to mutate the `secret` in-place. In practice a copy of `secret`
 is made so that the original value is not lost. Then the following
@@ -216,7 +218,7 @@ components of the RSA key as described in other literature.
 
 The exponent of the key is always assumed be 65537.
 
-### RSA Security Analysis
+#### RSA Security Analysis
 
 The algorithm is largely based on the implementation
 from OpenSSL's `RSA_generate_key()` method, as seen

@@ -94,7 +94,7 @@ impl CommandSecret {
             }
 
             CommandSecret::Zero => {
-                tool_state.import(&Secret::ZERO)?;
+                tool_state.import_root(&Secret::ZERO)?;
                 write!(out, "Imported {}", tool_state.current_secret()?.id())?;
                 Ok(())
             }
@@ -126,7 +126,7 @@ impl CommandSecret {
 
             CommandSecret::Passphrase { passphrase } => {
                 if let Some(passphrase) = passphrase.as_ref() {
-                    tool_state.import(&Secret::from_passphrase(passphrase))?;
+                    tool_state.import_root(&Secret::from_passphrase(passphrase))?;
                 } else {
                     let passphrase = rpassword::prompt_password("Enter passphrase: ")?;
 
@@ -140,7 +140,7 @@ impl CommandSecret {
                         bail!("Passphrases do not match");
                     }
 
-                    tool_state.import(&Secret::from_passphrase(passphrase))?;
+                    tool_state.import_root(&Secret::from_passphrase(passphrase))?;
                 }
                 write!(out, "Imported {}", tool_state.current_secret()?.id())?;
                 Ok(())
@@ -191,7 +191,7 @@ impl CommandSecret {
                     }
                 }
 
-                tool_state.import(&Secret::try_from_shares(&shares)?)?;
+                tool_state.import_root(&Secret::try_from_shares(&shares)?)?;
 
                 write!(out, "Imported {}", tool_state.current_secret()?.id())?;
                 Ok(())

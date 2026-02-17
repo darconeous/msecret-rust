@@ -191,7 +191,7 @@ impl Derivable for Secret {
         Ok(self.0)
     }
 
-    /// Returns the secret identifier as a 16-byte array.
+    /// Returns the secret identifier.
     fn id(&self) -> SecretId {
         let Secret(bytes) = self.subsecret_from_salt(b"\x00SecretId").unwrap();
         let mut ret = [0u8; SecretId::LEN];

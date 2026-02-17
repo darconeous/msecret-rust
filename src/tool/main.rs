@@ -162,7 +162,7 @@ impl ToolArgs {
                 !self.passphrase,
                 "Can't specify both --secret and --passphrase at same time!"
             );
-            tool_state.import(&secret)?;
+            tool_state.import_root(&secret)?;
         } else if let Some(secret_file) = self.secret_file.as_ref().map(String::clone) {
             ensure!(
                 !self.rand_secret,
@@ -188,7 +188,7 @@ impl ToolArgs {
 
             ensure!(passphrase == passphrase_check, "Passphrases do not match.");
 
-            tool_state.import(&Secret::from_passphrase(passphrase))?;
+            tool_state.import_root(&Secret::from_passphrase(passphrase))?;
 
             eprintln!("Imported {}", tool_state.current_secret()?.id());
         }

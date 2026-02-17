@@ -28,7 +28,7 @@ pub trait ToolState: AsMut<Self> {
     fn current_secret(&self) -> Result<Self::Secret>;
 
     /// Imports a [`Secret`] into the root keypath for the tool and resets the keypath to '/'.
-    fn import(&mut self, secret: &Secret) -> Result;
+    fn import_root(&mut self, secret: &Secret) -> Result;
 
     /// Exports the secret at the current keypath as a [`Secret`], if available.
     ///
@@ -175,7 +175,7 @@ impl ToolState for StandardToolState {
         }
     }
 
-    fn import(&mut self, secret: &Secret) -> Result<()> {
+    fn import_root(&mut self, secret: &Secret) -> Result<()> {
         self.reset();
         self.secret = Some(secret.clone());
         Ok(())
