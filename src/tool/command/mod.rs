@@ -15,7 +15,7 @@
 // limitations under the License.
 
 #[cfg(all(target_os = "macos", feature = "asf"))]
-mod asf;
+mod ctk;
 mod btc;
 mod bytes;
 mod ecc;
@@ -37,7 +37,7 @@ use num_bigint::BigUint;
 use std::io::Write;
 
 #[cfg(all(target_os = "macos", feature = "asf"))]
-pub use asf::*;
+pub use ctk::*;
 pub use self::rsa::*;
 pub use btc::*;
 pub use bytes::*;
@@ -91,10 +91,10 @@ pub enum Command {
     /// Generate a test-vector document that can be used for verifying implementation correctness.
     TestVectors(CommandTestVectors),
 
-    /// Import a derived key into the macOS Keychain using Apple Security Framework.
+    /// Export a derived key to the macOS CryptoTokenKit store.
     #[cfg(all(target_os = "macos", feature = "asf"))]
-    #[command(name = "asf-import", subcommand)]
-    AsfImport(CommandAsfImport),
+    #[command(name = "apple-ctk-export", subcommand)]
+    CtkExport(CommandCtkExport),
 
     /// Exits interactive mode.
     #[command(alias("q"), alias("quit"))]
@@ -129,7 +129,7 @@ impl Command {
             Command::Password(x) => return x.process(tool_state, out),
             Command::TestVectors(x) => return x.process(tool_state, out),
             #[cfg(all(target_os = "macos", feature = "asf"))]
-            Command::AsfImport(x) => return x.process(tool_state, out),
+            Command::CtkExport(x) => return x.process(tool_state, out),
             Command::Exit => {}
         }
         Ok(())

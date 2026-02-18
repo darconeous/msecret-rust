@@ -390,9 +390,9 @@ fn is_ecc_curve_position(cmd_names: &[String], positional_index: usize) -> bool 
     {
         return true;
     }
-    // asf-import ecc <CURVE>
+    // apple-ctk-export ecc <CURVE>
     #[cfg(all(target_os = "macos", feature = "asf"))]
-    if n >= 2 && cmd_names[n - 2] == "asf-import" && cmd_names[n - 1] == "ecc" {
+    if n >= 2 && cmd_names[n - 2] == "apple-ctk-export" && cmd_names[n - 1] == "ecc" {
         return true;
     }
     false

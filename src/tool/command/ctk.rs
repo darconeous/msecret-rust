@@ -21,24 +21,24 @@ use zeroize::Zeroize;
 
 /// Access control type for keychain items.
 #[derive(Debug, Clone, clap::ValueEnum)]
-pub enum AsfAccessType {
+pub enum CtkAccessType {
     /// No special access control (default keychain protection).
     None,
     /// Require biometric authentication (Touch ID) for key usage.
     Bio,
 }
 
-impl std::fmt::Display for AsfAccessType {
+impl std::fmt::Display for CtkAccessType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AsfAccessType::None => write!(f, "none"),
-            AsfAccessType::Bio => write!(f, "bio"),
+            CtkAccessType::None => write!(f, "none"),
+            CtkAccessType::Bio => write!(f, "bio"),
         }
     }
 }
 
 #[derive(Debug, clap::Subcommand, Clone)]
-pub enum CommandAsfImport {
+pub enum CommandCtkExport {
     /// Import a derived ECC key into the macOS Keychain.
     Ecc {
         /// The ECC curve to use. Currently only prime256v1 (P-256) is supported.
@@ -51,7 +51,7 @@ pub enum CommandAsfImport {
 
         /// Access control type: "none" (default) or "bio" (Touch ID).
         #[arg(short = 't', long = "access-type", default_value = "none")]
-        access_type: AsfAccessType,
+        access_type: CtkAccessType,
 
         /// Print what would be done without actually importing.
         #[arg(long)]
@@ -60,7 +60,7 @@ pub enum CommandAsfImport {
 }
 
 /// Normalize common P-256 curve name aliases to the canonical name.
-fn normalize_asf_curve_name(curve: &str) -> Result<&'static str, Error> {
+fn normalize_ctk_curve_name(curve: &str) -> Result<&'static str, Error> {
     match curve {
         "p256" | "p-256" | "nistp256" | "secp256r1" | "prime256v1" => Ok("prime256v1"),
         _ => bail!(
@@ -118,7 +118,7 @@ where
 fn sc_auth_import(
     secret_key: &p256::SecretKey,
     label: &str,
-    access_type: &AsfAccessType,
+    access_type: &CtkAccessType,
 ) -> Result<(), Error> {
     use openssl::bn::{BigNum, BigNumContext};
     use openssl::ec::{EcGroup, EcKey, EcPoint};
@@ -216,8 +216,8 @@ fn sc_auth_import(
     // Write the encrypted PKCS12 to a temp file for sc_auth
     let import_result = with_secure_temp_file("p12", &p12_der, |p12_path| {
         let access_str = match access_type {
-            AsfAccessType::None => "none",
-            AsfAccessType::Bio => "bio",
+            CtkAccessType::None => "none",
+            CtkAccessType::Bio => "bio",
         };
 
         let output = Command::new("sc_auth")
@@ -244,20 +244,20 @@ fn sc_auth_import(
     import_result
 }
 
-impl CommandAsfImport {
+impl CommandCtkExport {
     pub fn process<T: AsMut<S>, S: ToolState, W: Write>(
         &self,
         mut tool_state: T,
         out: &mut W,
     ) -> Result<(), Error> {
         match self {
-            CommandAsfImport::Ecc {
+            CommandCtkExport::Ecc {
                 curve,
                 label,
                 access_type,
                 dry_run,
             } => {
-                let curve_name = normalize_asf_curve_name(curve)?;
+                let curve_name = normalize_ctk_curve_name(curve)?;
 
                 let tool_state = tool_state.as_mut();
                 let keypath = tool_state.get_keypath()?;
@@ -298,7 +298,7 @@ impl CommandAsfImport {
                     .key_map_mut()
                     .update(keypath)
                     .unwrap()
-                    .add_primitive("asf-import:prime256v1");
+                    .add_primitive("apple-ctk-export:prime256v1");
 
                 writeln!(out, "Key imported to macOS Keychain.")?;
                 Ok(())
@@ -312,13 +312,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_normalize_asf_curve_name() {
-        assert_eq!(normalize_asf_curve_name("p256").unwrap(), "prime256v1");
-        assert_eq!(normalize_asf_curve_name("p-256").unwrap(), "prime256v1");
-        assert_eq!(normalize_asf_curve_name("prime256v1").unwrap(), "prime256v1");
-        assert_eq!(normalize_asf_curve_name("nistp256").unwrap(), "prime256v1");
-        assert_eq!(normalize_asf_curve_name("secp256r1").unwrap(), "prime256v1");
-        assert!(normalize_asf_curve_name("ed25519").is_err());
-        assert!(normalize_asf_curve_name("secp384r1").is_err());
+    fn test_normalize_ctk_curve_name() {
+        assert_eq!(normalize_ctk_curve_name("p256").unwrap(), "prime256v1");
+        assert_eq!(normalize_ctk_curve_name("p-256").unwrap(), "prime256v1");
+        assert_eq!(normalize_ctk_curve_name("prime256v1").unwrap(), "prime256v1");
+        assert_eq!(normalize_ctk_curve_name("nistp256").unwrap(), "prime256v1");
+        assert_eq!(normalize_ctk_curve_name("secp256r1").unwrap(), "prime256v1");
+        assert!(normalize_ctk_curve_name("ed25519").is_err());
+        assert!(normalize_ctk_curve_name("secp384r1").is_err());
     }
 }
