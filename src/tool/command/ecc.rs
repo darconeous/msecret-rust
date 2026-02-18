@@ -69,15 +69,25 @@ pub enum CommandEcc {
         #[arg(long)]
         prehash: bool,
 
-        #[arg(short, long, value_name = "FORMAT", default_value = "hex")]
-        in_format: BinFormat,
+        /// Input format for DATA. Defaults to hex. Cannot be used with --file.
+        #[arg(short, long, value_name = "FORMAT")]
+        in_format: Option<BinFormat>,
 
         /// The data to sign, or (if prehash is set) the hash to sign.
-        #[arg(value_name = "DATA")]
-        data: String,
+        /// Mutually exclusive with --file.
+        #[arg(value_name = "DATA", required_unless_present = "file", conflicts_with = "file")]
+        data: Option<String>,
+
+        /// Read input data as raw bytes from a file. Mutually exclusive with DATA and --in-format.
+        #[arg(long, value_name = "FILE", conflicts_with = "data")]
+        file: Option<std::path::PathBuf>,
 
         #[arg(short = 'f', long, value_name = "FORMAT", default_value = "hex")]
         out_format: BinFormat,
+
+        /// Write signature to this file instead of stdout. Respects --out-format.
+        #[arg(short = 'o', long = "sig-file", value_name = "FILE")]
+        sig_file: Option<std::path::PathBuf>,
     },
 
     /// Verify that a given signature matches the given data using ECDSA/EdDSA.
@@ -89,12 +99,22 @@ pub enum CommandEcc {
         #[arg(long)]
         prehash: bool,
 
-        /// The data to verify, or (if prehash is set) the hash to verify.
-        #[arg(value_name = "DATA")]
-        data: String,
+        /// Hex-encoded signature. Mutually exclusive with --sig-file.
+        #[arg(value_name = "SIGNATURE-HEX", required_unless_present = "sig_file", conflicts_with = "sig_file")]
+        signature: Option<String>,
 
-        #[arg(value_name = "SIGNATURE-HEX")]
-        signature: String,
+        /// Read signature (hex-encoded) from this file. Mutually exclusive with SIGNATURE-HEX.
+        #[arg(long = "sig-file", value_name = "FILE", conflicts_with = "signature")]
+        sig_file: Option<std::path::PathBuf>,
+
+        /// The data to verify, or (if prehash is set) the hash to verify.
+        /// Mutually exclusive with --file.
+        #[arg(value_name = "DATA", required_unless_present = "file", conflicts_with = "file")]
+        data: Option<String>,
+
+        /// Read input data as raw bytes from a file. Mutually exclusive with DATA.
+        #[arg(long, value_name = "FILE", conflicts_with = "data")]
+        file: Option<std::path::PathBuf>,
     },
 }
 
@@ -166,6 +186,39 @@ fn ed25519_private_to_openssh(private_key: &ed25519_dalek::SigningKey) -> Result
     ))
 }
 
+/// Resolve the signature bytes for verify from either a hex string arg or a --sig-file (hex).
+fn resolve_sig(
+    signature: &Option<String>,
+    sig_file: &Option<std::path::PathBuf>,
+) -> Result<Vec<u8>, Error> {
+    if let Some(path) = sig_file {
+        let hex_str = std::fs::read_to_string(path)?;
+        BinFormat::Hex.try_from_str(hex_str.trim())
+    } else {
+        BinFormat::Hex.try_from_str(signature.as_deref().unwrap())
+    }
+}
+
+/// Resolve the bytes to sign/verify from either a DATA string (decoded with `in_format`,
+/// defaulting to hex) or a `--file` path (read as raw bytes). Errors if both `--file` and
+/// `--in-format` are specified.
+fn resolve_sign_data(
+    data: &Option<String>,
+    file: &Option<std::path::PathBuf>,
+    in_format: Option<BinFormat>,
+) -> Result<Vec<u8>, Error> {
+    if let Some(path) = file {
+        if in_format.is_some() {
+            bail!("--in-format cannot be used together with --file");
+        }
+        Ok(std::fs::read(path)?)
+    } else {
+        in_format
+            .unwrap_or(BinFormat::Hex)
+            .try_from_str(data.as_deref().unwrap())
+    }
+}
+
 impl CommandEcc {
     pub fn process<T: AsMut<S>, S: ToolState, W: Write>(
         &self,
@@ -173,6 +226,31 @@ impl CommandEcc {
         out: &mut W,
     ) -> Result<(), Error> {
         let tool_state = tool_state.as_mut();
+
+        // Catch likely missing curve name: if the "curve" positional looks like hex data
+        // or a signature rather than a real curve name, nudge the user.
+        match self {
+            CommandEcc::Sign { curve, .. } | CommandEcc::Verify { curve, .. }
+                if curve.len() > 40 =>
+            {
+                let subcmd = if matches!(self, CommandEcc::Sign { .. }) {
+                    "sign"
+                } else {
+                    "verify"
+                };
+                bail!(
+                    "Unknown curve {:?}. Did you forget to specify the curve name?\n\
+                     Usage: ecc {subcmd} <CURVE> ...",
+                    if curve.len() > 20 {
+                        format!("{}...", &curve[..20])
+                    } else {
+                        curve.clone()
+                    }
+                );
+            }
+            _ => {}
+        }
+
         match self {
             CommandEcc::List => {
                 writeln!(out, "ed25519")?;
@@ -430,28 +508,18 @@ impl CommandEcc {
                 in_format,
                 out_format: format,
                 data,
+                file,
+                sig_file,
             } if curve == "ed25519" => {
                 let secret = tool_state.current_secret()?;
-                let data = in_format.try_from_str(data)?;
-
+                let data = resolve_sign_data(data, file, *in_format)?;
                 let output = secret.sign_ed25519(&data)?;
-
-                format.write(out, &output)?;
-                Ok(())
-            }
-
-            CommandEcc::Sign {
-                curve,
-                prehash: false,
-                in_format,
-                out_format: format,
-                data,
-            } if curve == "ed25519" => {
-                let secret = tool_state.current_secret()?;
-                let data = in_format.try_from_str(data)?;
-                let output = secret.sign_ed25519(&data)?;
-
-                format.write(out, &output)?;
+                if let Some(path) = sig_file {
+                    let mut f = std::fs::File::create(path)?;
+                    format.write(&mut f, &output)?;
+                } else {
+                    format.write(out, &output)?;
+                }
                 Ok(())
             }
 
@@ -459,14 +527,14 @@ impl CommandEcc {
                 curve,
                 prehash: false,
                 data,
+                file,
                 signature,
+                sig_file,
             } if curve == "ed25519" => {
                 let secret = tool_state.current_secret()?;
-                let data = BinFormat::Hex.try_from_str(data)?;
-                let signature = BinFormat::Hex.try_from_str(signature)?;
-
+                let data = resolve_sign_data(data, file, None)?;
+                let signature = resolve_sig(signature, sig_file)?;
                 secret.verify_ed25519(&data, &signature)?;
-
                 write!(out, "Ok")?;
                 Ok(())
             }
@@ -477,12 +545,18 @@ impl CommandEcc {
                 in_format,
                 out_format: format,
                 data,
+                file,
+                sig_file,
             } if curve == "ed25519" => {
                 let secret = tool_state.current_secret()?;
-                let data = in_format.try_from_str(data)?;
+                let data = resolve_sign_data(data, file, *in_format)?;
                 let output = secret.sign_ed25519ph(&data, None)?;
-
-                format.write(out, &output)?;
+                if let Some(path) = sig_file {
+                    let mut f = std::fs::File::create(path)?;
+                    format.write(&mut f, &output)?;
+                } else {
+                    format.write(out, &output)?;
+                }
                 Ok(())
             }
 
@@ -490,14 +564,14 @@ impl CommandEcc {
                 curve,
                 prehash: true,
                 data,
+                file,
                 signature,
+                sig_file,
             } if curve == "ed25519" => {
                 let secret = tool_state.current_secret()?;
-                let data = BinFormat::Hex.try_from_str(data)?;
-                let signature = BinFormat::Hex.try_from_str(signature)?;
-
+                let data = resolve_sign_data(data, file, None)?;
+                let signature = resolve_sig(signature, sig_file)?;
                 secret.verify_ed25519ph(&data, None, &signature)?;
-
                 write!(out, "Ok")?;
                 Ok(())
             }
@@ -509,16 +583,21 @@ impl CommandEcc {
                 in_format,
                 out_format,
                 data,
+                file,
+                sig_file,
             } => {
                 use openssl::ecdsa::EcdsaSig;
                 let secret = tool_state.current_secret()?;
                 let group = ec_group_from_str(curve)?;
                 let eckey = secret.extract_ec_v1_private_openssl(&group)?;
-                let data = in_format.try_from_str(data.as_str())?;
+                let data = resolve_sign_data(data, file, *in_format)?;
                 let sig = EcdsaSig::sign(&data, &eckey)?;
-
-                out_format.write(out, &sig.to_der()?)?;
-
+                if let Some(path) = sig_file {
+                    let mut f = std::fs::File::create(path)?;
+                    out_format.write(&mut f, &sig.to_der()?)?;
+                } else {
+                    out_format.write(out, &sig.to_der()?)?;
+                }
                 Ok(())
             }
 
@@ -527,15 +606,16 @@ impl CommandEcc {
                 curve,
                 prehash: true,
                 data,
+                file,
                 signature,
+                sig_file,
             } => {
                 use openssl::ecdsa::EcdsaSig;
                 let secret = tool_state.current_secret()?;
                 let group = ec_group_from_str(curve)?;
                 let eckey = secret.extract_ec_v1_private_openssl(&group)?;
-                let data = BinFormat::Hex.try_from_str(data.as_str())?;
-                let sig = BinFormat::Hex.try_from_str(signature.as_str())?;
-
+                let data = resolve_sign_data(data, file, None)?;
+                let sig = resolve_sig(signature, sig_file)?;
                 let verified = EcdsaSig::from_der(&sig)?.verify(&data, &eckey)?;
                 ensure!(verified, "Signature doesn't match");
                 println!("Ok");
