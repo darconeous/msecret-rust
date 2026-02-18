@@ -50,7 +50,7 @@ typenum = "1"
 elliptic-curve = { version = "0.13", default-features = false, features = ["hazmat", "sec1", "pem"] }
 ed25519-dalek = { version = "2.0.0-rc.3", features = ["digest", "pkcs8", "pem", "zeroize"] }
 x25519-dalek = { version = "2.0.0-rc.3", features = ["static_secrets"] }
-zeroize = { version = "1.6", features = ["zeroize_derive"] }
+zeroize = { version = ">=1.6", features = ["zeroize_derive"] }
 
 # Needed for Bitcoin support.
 ripemd = "0.1"
@@ -58,7 +58,8 @@ k256 = { version = "0.13", features = ["ecdh","ecdsa"]}
 
 # YubiKey PIV support. Requires the `yubikey` feature. Key import uses the
 # `untested` feature of the yubikey crate (not officially validated by maintainers).
-yubikey = { version = "0.8", features = ["untested"], optional = true }
+# Using fork with Ed25519/X25519/RSA-3072/4096 support (PR #577).
+yubikey = { git = "https://github.com/darconeous/yubikey.rs.git", branch = "curve_25519", features = ["untested"], optional = true }
 
 # Only needed for the binary.
 rpassword = { version = "7", optional = true }
@@ -72,3 +73,7 @@ clap = { version = "4.3", features = ["derive"], optional = true }
 name = "msecretctl"
 path = "src/tool/main.rs"
 required-features = ["bin"]
+
+# TODO: Remove this once the fork's pinned versions are pushed to the remote.
+[patch."https://github.com/darconeous/yubikey.rs.git"]
+yubikey = { path = "../yubikey.rs" }

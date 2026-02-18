@@ -146,11 +146,11 @@ pub enum CommandYubikey {
 /// Key type to import into a PIV slot.
 #[derive(Debug, clap::Subcommand, Clone)]
 pub enum CommandYubikeyImport {
-    /// Import a derived ECC private key (P-256 or P-384).
+    /// Import a derived ECC private key (P-256, P-384, Ed25519, or X25519).
     ///
-    /// Note: Ed25519 and X25519 are not yet supported by the yubikey crate.
+    /// Ed25519 and X25519 require YubiKey 5 with firmware 5.7+.
     Ecc {
-        /// Curve name: p256 or p384.
+        /// Curve name: p256, p384, ed25519, or x25519.
         curve: String,
 
         /// PIV slot to import into (9a, 9c, 9d, 9e, or 82-95). Required.
@@ -190,11 +190,11 @@ pub enum CommandYubikeyImport {
         dry_run: bool,
     },
 
-    /// Import a derived RSA private key (2048 bits).
+    /// Import a derived RSA private key (2048, 3072, or 4096 bits).
     ///
-    /// Note: RSA 3072 and 4096 are not yet supported by the yubikey crate.
+    /// RSA 3072 and 4096 require YubiKey 5 with firmware 5.7+.
     Rsa {
-        /// Key size in bits (currently only 2048 is supported by the yubikey crate).
+        /// Key size in bits: 2048, 3072, or 4096.
         bits: u16,
 
         /// PIV slot to import into (9a, 9c, 9d, 9e, or 82-95). Required.
@@ -258,7 +258,7 @@ fn resolve_mgm_key<W: Write>(mgm_key_flag: Option<&str>, out: &mut W) -> Result<
             );
             let mut key_array = [0u8; MGM_KEY_LEN];
             key_array.copy_from_slice(&bytes);
-            let mgm = MgmKey::new(key_array)
+            let mgm = MgmKey::from_bytes(&key_array, None)
                 .map_err(|e| anyhow::anyhow!("Invalid management key: {:?}", e))?;
             key_array.zeroize();
             Ok(mgm)
@@ -266,11 +266,16 @@ fn resolve_mgm_key<W: Write>(mgm_key_flag: Option<&str>, out: &mut W) -> Result<
         None => {
             writeln!(
                 out,
-                "Warning: Using default management key. \
+                "Warning: Using default management key (3DES). \
                  Set {} or --mgm-key to use a custom key.",
                 ENV_MGM_KEY
             )?;
-            Ok(MgmKey::default())
+            // Well-known default management key used by YubiKey factory settings.
+            let default_bytes: [u8; 24] = [
+                1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8,
+            ];
+            MgmKey::from_bytes(&default_bytes, None)
+                .map_err(|e| anyhow::anyhow!("Failed to construct default management key: {:?}", e))
         }
     }
 }
@@ -398,7 +403,8 @@ fn is_slot_occupied(yk: &mut YubiKey, slot: SlotId) -> bool {
 pub enum EccCurve {
     P256,
     P384,
-    // Ed25519 and X25519 are not yet supported by yubikey crate 0.8.
+    Ed25519,
+    X25519,
 }
 
 impl EccCurve {
@@ -406,6 +412,8 @@ impl EccCurve {
         match self {
             EccCurve::P256 => AlgorithmId::EccP256,
             EccCurve::P384 => AlgorithmId::EccP384,
+            EccCurve::Ed25519 => AlgorithmId::Ed25519,
+            EccCurve::X25519 => AlgorithmId::X25519,
         }
     }
 
@@ -413,6 +421,8 @@ impl EccCurve {
         match self {
             EccCurve::P256 => "P-256 (prime256v1)",
             EccCurve::P384 => "P-384 (secp384r1)",
+            EccCurve::Ed25519 => "Ed25519",
+            EccCurve::X25519 => "X25519",
         }
     }
 
@@ -420,7 +430,14 @@ impl EccCurve {
         match self {
             EccCurve::P256 => "prime256v1",
             EccCurve::P384 => "secp384r1",
+            EccCurve::Ed25519 => "ed25519",
+            EccCurve::X25519 => "x25519",
         }
+    }
+
+    /// Returns true if this curve uses the Curve25519 import path (`import_cv_key`).
+    pub fn is_curve25519(self) -> bool {
+        matches!(self, EccCurve::Ed25519 | EccCurve::X25519)
     }
 }
 
@@ -429,13 +446,10 @@ pub fn parse_ecc_curve(s: &str) -> Result<EccCurve, Error> {
     match s.to_lowercase().as_str() {
         "p256" | "p-256" | "prime256v1" | "nistp256" | "secp256r1" => Ok(EccCurve::P256),
         "p384" | "p-384" | "prime384v1" | "nistp384" | "secp384r1" => Ok(EccCurve::P384),
-        "ed25519" | "x25519" => bail!(
-            "Curve {:?} is not yet supported by the yubikey crate \
-             (requires crate update for YubiKey 5 FW 5.7+ algorithms).",
-            s
-        ),
+        "ed25519" => Ok(EccCurve::Ed25519),
+        "x25519" => Ok(EccCurve::X25519),
         _ => bail!(
-            "Unknown or unsupported curve {:?}. Supported: p256, p384.",
+            "Unknown or unsupported curve {:?}. Supported: p256, p384, ed25519, x25519.",
             s
         ),
     }
@@ -452,7 +466,7 @@ fn build_ecc_cert_der<D: Ecc>(label: &str, curve: EccCurve, secret: &D) -> Resul
         bn::{BigNum, BigNumContext},
         ec::{EcGroup, EcKey, EcPoint},
         nid::Nid,
-        pkey::PKey,
+        pkey::{Id, PKey},
     };
 
     let pkey = match curve {
@@ -471,6 +485,16 @@ fn build_ecc_cert_der<D: Ecc>(label: &str, curve: EccCurve, secret: &D) -> Resul
             let group = EcGroup::from_curve_name(Nid::SECP384R1)?;
             let ec_key = secret.extract_ec_v1_private_openssl(&group)?;
             PKey::from_ec_key(ec_key)?
+        }
+        EccCurve::Ed25519 => {
+            let sk = secret.extract_ed25519_private()?;
+            PKey::private_key_from_raw_bytes(&sk.to_bytes(), Id::ED25519)?
+        }
+        EccCurve::X25519 => {
+            bail!(
+                "X25519 is a key-agreement algorithm and cannot self-sign certificates. \
+                 Use --no-cert when importing X25519 keys."
+            );
         }
     };
 
@@ -593,8 +617,8 @@ impl CommandYubikey {
                         Err(_) => {
                             let bits: u16 = key_type.parse().map_err(|_| {
                                 anyhow::anyhow!(
-                                    "Unknown key type {:?}. Expected a curve name (p256, p384) \
-                                     or RSA bit size (2048).",
+                                    "Unknown key type {:?}. Expected a curve name \
+                                     (p256, p384, ed25519) or RSA bit size (2048, 3072, 4096).",
                                     key_type
                                 )
                             })?;
@@ -603,7 +627,7 @@ impl CommandYubikey {
                     };
 
                     let mut yk = open_yubikey(reader_name)?;
-                    yk.authenticate(mgm)
+                    yk.authenticate(&mgm)
                         .map_err(|e| anyhow::anyhow!("Management key authentication failed: {:?}", e))?;
                     write_cert(&mut yk, slot_id, der)?;
                     writeln!(
@@ -720,7 +744,7 @@ impl CommandYubikeyImport {
                 }
 
                 let mgm = resolve_mgm_key(mgm_key.as_deref(), out)?;
-                yk.authenticate(mgm)
+                yk.authenticate(&mgm)
                     .map_err(|e| anyhow::anyhow!("Management key authentication failed: {:?}", e))?;
 
                 let mut pin_bytes = resolve_pin(pin.as_deref())?;
@@ -730,15 +754,27 @@ impl CommandYubikeyImport {
                 })?;
                 pin_bytes.zeroize();
 
-                piv::import_ecc_key(
-                    &mut yk,
-                    slot_id,
-                    curve.algorithm_id(),
-                    &key_bytes,
-                    touch_policy.clone().into(),
-                    pin_policy.clone().into(),
-                )
-                .map_err(|e| anyhow::anyhow!("Failed to import ECC key: {:?}", e))?;
+                if curve.is_curve25519() {
+                    piv::import_cv_key(
+                        &mut yk,
+                        slot_id,
+                        curve.algorithm_id(),
+                        &key_bytes,
+                        touch_policy.clone().into(),
+                        pin_policy.clone().into(),
+                    )
+                    .map_err(|e| anyhow::anyhow!("Failed to import Curve25519 key: {:?}", e))?;
+                } else {
+                    piv::import_ecc_key(
+                        &mut yk,
+                        slot_id,
+                        curve.algorithm_id(),
+                        &key_bytes,
+                        touch_policy.clone().into(),
+                        pin_policy.clone().into(),
+                    )
+                    .map_err(|e| anyhow::anyhow!("Failed to import ECC key: {:?}", e))?;
+                }
 
                 if !no_cert {
                     #[cfg(feature = "openssl")]
@@ -791,9 +827,10 @@ impl CommandYubikeyImport {
 
                 let algorithm_id = match bits {
                     2048 => AlgorithmId::Rsa2048,
+                    3072 => AlgorithmId::Rsa3072,
+                    4096 => AlgorithmId::Rsa4096,
                     _ => bail!(
-                        "Unsupported RSA key size {}. Currently only 2048 is supported \
-                         by the yubikey crate.",
+                        "Unsupported RSA key size {}. Supported: 2048, 3072, 4096.",
                         bits
                     ),
                 };
@@ -854,7 +891,7 @@ impl CommandYubikeyImport {
                     }
 
                     let mgm = resolve_mgm_key(mgm_key.as_deref(), out)?;
-                    yk.authenticate(mgm)
+                    yk.authenticate(&mgm)
                         .map_err(|e| anyhow::anyhow!("Management key authentication failed: {:?}", e))?;
 
                     let mut pin_bytes = resolve_pin(pin.as_deref())?;
@@ -936,6 +973,21 @@ fn extract_ecc_key_bytes<D: Ecc>(
             #[cfg(not(feature = "openssl"))]
             bail!("P-384 requires the 'openssl' feature.")
         }
+        EccCurve::Ed25519 => {
+            let sk = secret.extract_ed25519_private()?;
+            let vk = sk.verifying_key();
+            let key_bytes = sk.to_bytes().to_vec();
+            let pub_hex = hex::encode(vk.as_bytes());
+            Ok((key_bytes, pub_hex))
+        }
+        EccCurve::X25519 => {
+            let sk_bytes = secret.extract_x25519_private()?;
+            let sk = x25519_dalek::StaticSecret::from(sk_bytes);
+            let pk = x25519_dalek::PublicKey::from(&sk);
+            let key_bytes = sk_bytes.to_vec();
+            let pub_hex = hex::encode(pk.as_bytes());
+            Ok((key_bytes, pub_hex))
+        }
     }
 }
 
@@ -990,7 +1042,10 @@ mod tests {
         assert_eq!(parse_ecc_curve("nistp256").unwrap(), EccCurve::P256);
         assert_eq!(parse_ecc_curve("secp256r1").unwrap(), EccCurve::P256);
         assert_eq!(parse_ecc_curve("p384").unwrap(), EccCurve::P384);
-        assert!(parse_ecc_curve("ed25519").is_err());
+        assert_eq!(parse_ecc_curve("ed25519").unwrap(), EccCurve::Ed25519);
+        assert_eq!(parse_ecc_curve("Ed25519").unwrap(), EccCurve::Ed25519);
+        assert_eq!(parse_ecc_curve("x25519").unwrap(), EccCurve::X25519);
+        assert_eq!(parse_ecc_curve("X25519").unwrap(), EccCurve::X25519);
         assert!(parse_ecc_curve("secp256k1").is_err());
     }
 }
