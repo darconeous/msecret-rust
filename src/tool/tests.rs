@@ -141,7 +141,7 @@ fn test_ecc_ed25519() {
     );
     output.clear();
 
-    ToolArgs::process_line(&mut tool_state, "ecc verify ed25519 01020304 14b9bf716c4d8d797aa59be63077be20ddabcf616fbbe33faff3fe598ff78b91695960fb660b71acc04ed5d1ffed47316f1481eaf1749fa30f121cc8a1df3c08", &mut output).unwrap();
+    ToolArgs::process_line(&mut tool_state, "ecc verify ed25519 14b9bf716c4d8d797aa59be63077be20ddabcf616fbbe33faff3fe598ff78b91695960fb660b71acc04ed5d1ffed47316f1481eaf1749fa30f121cc8a1df3c08 01020304", &mut output).unwrap();
     assert_eq!(std::str::from_utf8(&output).unwrap(), "Ok");
     output.clear();
 }

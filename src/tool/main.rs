@@ -381,12 +381,21 @@ fn is_ecc_curve_position(cmd_names: &[String], positional_index: usize) -> bool 
         return false;
     }
     let n = cmd_names.len();
-    n >= 2
+    if n >= 2
         && cmd_names[n - 2] == "ecc"
         && matches!(
             cmd_names[n - 1].as_str(),
             "sign" | "public" | "private" | "verify"
         )
+    {
+        return true;
+    }
+    // asf-import ecc <CURVE>
+    #[cfg(all(target_os = "macos", feature = "asf"))]
+    if n >= 2 && cmd_names[n - 2] == "asf-import" && cmd_names[n - 1] == "ecc" {
+        return true;
+    }
+    false
 }
 
 /// Returns the list of supported ECC curve names, mirroring the output of `ecc list`.

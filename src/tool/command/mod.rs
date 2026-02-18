@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(all(target_os = "macos", feature = "asf"))]
+mod asf;
 mod btc;
 mod bytes;
 mod ecc;
@@ -34,6 +36,8 @@ use msecret::*;
 use num_bigint::BigUint;
 use std::io::Write;
 
+#[cfg(all(target_os = "macos", feature = "asf"))]
+pub use asf::*;
 pub use self::rsa::*;
 pub use btc::*;
 pub use bytes::*;
@@ -87,6 +91,11 @@ pub enum Command {
     /// Generate a test-vector document that can be used for verifying implementation correctness.
     TestVectors(CommandTestVectors),
 
+    /// Import a derived key into the macOS Keychain using Apple Security Framework.
+    #[cfg(all(target_os = "macos", feature = "asf"))]
+    #[command(name = "asf-import", subcommand)]
+    AsfImport(CommandAsfImport),
+
     /// Exits interactive mode.
     #[command(alias("q"), alias("quit"))]
     Exit,
@@ -119,6 +128,8 @@ impl Command {
             Command::Btc(x) => return x.process(tool_state, out),
             Command::Password(x) => return x.process(tool_state, out),
             Command::TestVectors(x) => return x.process(tool_state, out),
+            #[cfg(all(target_os = "macos", feature = "asf"))]
+            Command::AsfImport(x) => return x.process(tool_state, out),
             Command::Exit => {}
         }
         Ok(())
