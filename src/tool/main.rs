@@ -35,14 +35,14 @@ mod command;
 #[cfg(test)]
 mod tests;
 
-#[derive(
-    Debug,
-    Parser,
-    rustyline::Helper,
-    rustyline::Highlighter,
-    rustyline::Hinter,
-    rustyline::Validator,
-)]
+/// Wrapper used to parse REPL lines via clap and to build the completion command tree.
+#[derive(Debug, Parser)]
+struct ReplCommandLine {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Parser)]
 #[command(name = "msecret")]
 #[command(about = "A tool for deriving cryptographic secrets", long_about = None)]
 pub struct ToolArgs {
@@ -74,63 +74,118 @@ pub struct ToolArgs {
     pub command: Option<Command>,
 }
 
-impl Completer for ToolArgs {
+/// Zero-sized rustyline helper that provides tab completion for the interactive REPL.
+#[derive(rustyline::Helper, rustyline::Hinter, rustyline::Highlighter, rustyline::Validator)]
+struct ReplHelper;
+
+impl Completer for ReplHelper {
     type Candidate = Pair;
 
-    //#[cfg(!complete)]
     fn complete(
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context<'_>,
+        _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        let _ = (line, pos, ctx);
-        Ok((0, Vec::with_capacity(0)))
-    }
+        use clap::CommandFactory;
 
-    // #[cfg(complete)]
-    // fn complete(&self, line: &str, pos: usize, ctx: &Context<'_>) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-    //     // TODO: Writeme!
-    //     let mut cmd = Self::command();
-    //     let mut tokens = match shellwords::split(line) {
-    //         Ok(mut args) => {
-    //             args.insert(0, cmd.get_name().to_string());
-    //             args.into_iter()
-    //         },
-    //         Err(_) => {
-    //             eprintln!("tab: Can't split");
-    //             return Ok((0, vec![]));
-    //         }
-    //     };
-    //
-    //     let mut last_token = String::from(tokens.next_back().unwrap());
-    //
-    //     for tok in tokens {
-    //         let next_cmd = cmd.find_subcommand(tok);
-    //         if next_cmd.is_none() {
-    //             eprintln!("tab: next_cmd.is_none");
-    //             return Ok((pos, vec![]));
-    //         }
-    //         cmd = next_cmd.unwrap().clone();
-    //     }
-    //
-    //     let candidates: Vec<String> = cmd
-    //         .completions
-    //         .to_vec()
-    //         .into_iter()
-    //         .filter(|x| x.starts_with(&last_token))
-    //         .collect();
-    //     Ok((
-    //         line.len() - last_token.len() - 1,
-    //         candidates
-    //             .iter()
-    //             .map(|cmd| Pair {
-    //                 display: String::from(cmd),
-    //                 replacement: format!("{} ", cmd),
-    //             })
-    //             .collect(),
-    //     ))
-    // }
+        let line_to_cursor = &line[..pos];
+
+        // Tokenize up to the cursor; bail out gracefully on parse errors (e.g. unclosed quotes).
+        let mut tokens = match shellwords::split(line_to_cursor) {
+            Ok(t) => t,
+            Err(_) => return Ok((pos, vec![])),
+        };
+
+        // Separate the partial word being typed from the already-completed tokens.
+        let (partial, complete_start) =
+            if !line_to_cursor.ends_with(|c: char| c.is_whitespace()) && !tokens.is_empty() {
+                let partial = tokens.pop().unwrap();
+                let start = pos - partial.len();
+                (partial, start)
+            } else {
+                (String::new(), pos)
+            };
+
+        // Walk the command tree with the "done" tokens, tracking state.
+        let mut cmd = ReplCommandLine::command();
+        let mut cmd_names: Vec<String> = vec![];
+        let mut positional_index: usize = 0;
+        let mut expect_value_for: Option<String> = None;
+
+        for token in &tokens {
+            if expect_value_for.take().is_some() {
+                // This token is the value consumed by the previous flag; skip tree navigation.
+                continue;
+            }
+
+            if token.starts_with('-') {
+                // Flag token — determine if the next token will be its value.
+                let flag_name = token.trim_start_matches('-');
+                if let Some(arg) = cmd.get_arguments().find(|a| {
+                    a.get_long() == Some(flag_name)
+                        || a.get_short()
+                            .map(|c| c.to_string() == flag_name)
+                            .unwrap_or(false)
+                }) {
+                    if flag_takes_value(arg) {
+                        expect_value_for = Some(flag_name.to_string());
+                    }
+                }
+            } else if let Some(sub) = cmd.find_subcommand(token) {
+                // Descend into subcommand; record the canonical name.
+                let name = sub.get_name().to_string();
+                cmd = sub.clone();
+                cmd_names.push(name);
+                positional_index = 0;
+            } else {
+                // Positional argument value — advance the index.
+                positional_index += 1;
+            }
+        }
+
+        // Collect the candidate completion strings.
+        let candidates: Vec<String> = if let Some(flag_name) = expect_value_for {
+            // The last done token was a value-taking flag; complete with its possible values.
+            cmd.get_arguments()
+                .find(|a| a.get_long() == Some(flag_name.as_str()))
+                .map(|a| {
+                    a.get_possible_values()
+                        .iter()
+                        .map(|v| v.get_name().to_string())
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else if partial.starts_with('-') {
+            // User is typing a flag; offer --long-flag names.
+            cmd.get_arguments()
+                .filter_map(|a| a.get_long().map(|l| format!("--{l}")))
+                .collect()
+        } else if is_ecc_curve_position(&cmd_names, positional_index) {
+            // First positional arg of an ecc subcommand — offer the runtime curve list.
+            ecc_curve_completions()
+        } else {
+            // Default: offer subcommand names and their aliases.
+            cmd.get_subcommands()
+                .flat_map(|sub| {
+                    std::iter::once(sub.get_name().to_string())
+                        .chain(sub.get_all_aliases().map(str::to_string))
+                })
+                .collect()
+        };
+
+        // Filter by prefix and wrap in Pairs.
+        let pairs: Vec<Pair> = candidates
+            .into_iter()
+            .filter(|c| c.starts_with(&partial))
+            .map(|c| Pair {
+                display: c.clone(),
+                replacement: format!("{c} "),
+            })
+            .collect();
+
+        Ok((complete_start, pairs))
+    }
 
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
         // TODO: Writeme!
@@ -229,12 +284,6 @@ impl ToolArgs {
         line: &str,
         out: &mut W,
     ) -> Result<bool> {
-        #[derive(Debug, Parser)]
-        struct CommandLine {
-            #[command(subcommand)]
-            command: Command,
-        }
-
         let mut args = match shellwords::split(line) {
             Ok(args) => args,
             Err(err) => {
@@ -245,7 +294,7 @@ impl ToolArgs {
 
         args.insert(0, ">".to_string());
 
-        let command = CommandLine::try_parse_from(args)?.command;
+        let command = ReplCommandLine::try_parse_from(args)?.command;
 
         if let &Command::Exit = &command {
             return Ok(false);
@@ -263,7 +312,8 @@ impl ToolArgs {
                 println!();
             }
         } else {
-            let mut rl = Editor::<ToolArgs, rustyline::history::DefaultHistory>::new()?;
+            let mut rl = Editor::<ReplHelper, rustyline::history::DefaultHistory>::new()?;
+            rl.set_helper(Some(ReplHelper));
 
             let mut last_command_did_err = false;
 
@@ -322,6 +372,52 @@ impl ToolArgs {
 
         Ok(())
     }
+}
+
+/// Returns true when the argument at `positional_index` inside the given command path is the
+/// `curve` positional arg of an `ecc` subcommand (public/private/sign/verify).
+fn is_ecc_curve_position(cmd_names: &[String], positional_index: usize) -> bool {
+    if positional_index != 0 {
+        return false;
+    }
+    let n = cmd_names.len();
+    n >= 2
+        && cmd_names[n - 2] == "ecc"
+        && matches!(
+            cmd_names[n - 1].as_str(),
+            "sign" | "public" | "private" | "verify"
+        )
+}
+
+/// Returns the list of supported ECC curve names, mirroring the output of `ecc list`.
+fn ecc_curve_completions() -> Vec<String> {
+    let mut curves = vec![
+        "ed25519".to_string(),
+        "x25519".to_string(),
+        // Shorthand aliases accepted by ec_group_from_str
+        "p256".to_string(),
+        "p384".to_string(),
+        "p521".to_string(),
+    ];
+    #[cfg(feature = "openssl")]
+    {
+        use openssl::{ec::EcGroup, nid::Nid};
+        for i in 0..32000i32 {
+            let nid = Nid::from_raw(i);
+            if EcGroup::from_curve_name(nid).is_ok() {
+                if let Ok(name) = nid.short_name() {
+                    curves.push(name.to_string());
+                }
+            }
+        }
+    }
+    curves
+}
+
+/// Returns true if a clap Arg consumes the next token as its value.
+fn flag_takes_value(arg: &clap::Arg) -> bool {
+    use clap::ArgAction;
+    matches!(arg.get_action(), ArgAction::Set | ArgAction::Append)
 }
 
 fn main() {
