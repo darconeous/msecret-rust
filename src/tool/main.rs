@@ -395,6 +395,11 @@ fn is_ecc_curve_position(cmd_names: &[String], positional_index: usize) -> bool 
     if n >= 2 && cmd_names[n - 2] == "apple-ctk-export" && cmd_names[n - 1] == "ecc" {
         return true;
     }
+    // yubikey import ecc <CURVE>
+    #[cfg(feature = "yubikey")]
+    if n >= 3 && cmd_names[n - 3] == "yubikey" && cmd_names[n - 2] == "import" && cmd_names[n - 1] == "ecc" {
+        return true;
+    }
     false
 }
 

@@ -19,6 +19,8 @@ edition = "2021"
 "bin" = ["rpassword", "shellwords", "rustyline", "mnemonic", "clap" ]
 "longtest" = []
 "asf" = []
+# Enable YubiKey PIV support. Requires Rust 1.81+, pcscd on Linux, and hardware for testing.
+"yubikey" = ["dep:yubikey", "openssl"]
 "default" = ["openssl", "share", "bin"]
 
 [dependencies]
@@ -53,6 +55,10 @@ zeroize = { version = "1.6", features = ["zeroize_derive"] }
 # Needed for Bitcoin support.
 ripemd = "0.1"
 k256 = { version = "0.13", features = ["ecdh","ecdsa"]}
+
+# YubiKey PIV support. Requires the `yubikey` feature. Key import uses the
+# `untested` feature of the yubikey crate (not officially validated by maintainers).
+yubikey = { version = "0.8", features = ["untested"], optional = true }
 
 # Only needed for the binary.
 rpassword = { version = "7", optional = true }

@@ -16,6 +16,8 @@
 
 #[cfg(all(target_os = "macos", feature = "asf"))]
 mod ctk;
+#[cfg(feature = "yubikey")]
+mod yubikey_cmd;
 mod btc;
 mod bytes;
 mod ecc;
@@ -38,6 +40,8 @@ use std::io::Write;
 
 #[cfg(all(target_os = "macos", feature = "asf"))]
 pub use ctk::*;
+#[cfg(feature = "yubikey")]
+pub use yubikey_cmd::*;
 pub use self::rsa::*;
 pub use btc::*;
 pub use bytes::*;
@@ -96,6 +100,11 @@ pub enum Command {
     #[command(name = "apple-ctk-export", subcommand)]
     CtkExport(CommandCtkExport),
 
+    /// Import derived keys into YubiKey PIV slots.
+    #[cfg(feature = "yubikey")]
+    #[command(subcommand)]
+    Yubikey(CommandYubikey),
+
     /// Exits interactive mode.
     #[command(alias("q"), alias("quit"))]
     Exit,
@@ -130,6 +139,8 @@ impl Command {
             Command::TestVectors(x) => return x.process(tool_state, out),
             #[cfg(all(target_os = "macos", feature = "asf"))]
             Command::CtkExport(x) => return x.process(tool_state, out),
+            #[cfg(feature = "yubikey")]
+            Command::Yubikey(x) => return x.process(tool_state, out),
             Command::Exit => {}
         }
         Ok(())
