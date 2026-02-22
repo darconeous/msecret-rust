@@ -31,7 +31,7 @@ There are currently several different patterns. Edit [the script](wordy-password
 Some additional entropy can be added by appending random numbers using
 `@RAND_999@` (~10 additional bits) or `@RAND_9999@` (~13 additional bits).
 
-Nore that the entropy figures above are the guaranteed minimum entropy
+Note that the entropy figures above are the guaranteed minimum entropy
 assuming that an attacker knows the pattern and the word lists. If the size
 of the word lists change, the entropy value wil also change. The script will
 print out the exact entropy of the generated passphrase.

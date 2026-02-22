@@ -18,6 +18,7 @@ use super::*;
 
 use yubikey::{
     certificate::{CertInfo, Certificate},
+    mgm::MgmAlgorithmId,
     piv::{self, AlgorithmId, RetiredSlotId, SlotId},
     MgmKey, PinPolicy, TouchPolicy, YubiKey,
 };
@@ -27,7 +28,7 @@ use zeroize::Zeroize;
 // Environment variable names
 // ---------------------------------------------------------------------------
 
-/// Management key override (48 hex chars for 3DES).
+/// Management key override (hex-encoded: 32 chars for AES-128, 48 for 3DES/AES-192, 64 for AES-256).
 const ENV_MGM_KEY: &str = "MSECRET_YUBIKEY_MGM_KEY";
 
 /// Default PC/SC reader name substring.
@@ -35,9 +36,6 @@ const ENV_READER: &str = "MSECRET_YUBIKEY_READER";
 
 /// Default PIN (prefer interactive prompt; this is for scripting only).
 const ENV_PIN: &str = "MSECRET_YUBIKEY_PIN";
-
-/// Length of a 3DES management key in bytes.
-const MGM_KEY_LEN: usize = 24;
 
 // ---------------------------------------------------------------------------
 // Policy enums (thin wrappers for clap)
@@ -240,41 +238,42 @@ pub enum CommandYubikeyImport {
 // ---------------------------------------------------------------------------
 
 /// Resolve management key: flag -> env var -> default (with warning).
-fn resolve_mgm_key<W: Write>(mgm_key_flag: Option<&str>, out: &mut W) -> Result<MgmKey, Error> {
+fn resolve_mgm_key<W: Write>(
+    mgm_key_flag: Option<&str>,
+    yubikey: &YubiKey,
+    out: &mut W,
+) -> Result<MgmKey, Error> {
     let hex_str = mgm_key_flag
         .map(str::to_string)
         .or_else(|| std::env::var(ENV_MGM_KEY).ok());
 
     match hex_str {
         Some(s) => {
-            let bytes = hex::decode(s.trim())
+            let mut bytes = hex::decode(s.trim())
                 .map_err(|e| anyhow::anyhow!("Invalid management key (expected hex): {}", e))?;
-            ensure!(
-                bytes.len() == MGM_KEY_LEN,
-                "Management key must be {} hex bytes ({} hex chars), got {} bytes.",
-                MGM_KEY_LEN,
-                MGM_KEY_LEN * 2,
-                bytes.len()
-            );
-            let mut key_array = [0u8; MGM_KEY_LEN];
-            key_array.copy_from_slice(&bytes);
-            let mgm = MgmKey::from_bytes(&key_array, None)
+            let alg = match bytes.len() {
+                16 => MgmAlgorithmId::Aes128,
+                24 => MgmAlgorithmId::Aes192,
+                32 => MgmAlgorithmId::Aes256,
+                n => bail!(
+                    "Invalid management key length ({} bytes). \
+                     Expected 16 (AES-128), 24 (AES-192), or 32 (AES-256) bytes.",
+                    n
+                ),
+            };
+            let mgm = MgmKey::from_bytes(&bytes, Some(alg))
                 .map_err(|e| anyhow::anyhow!("Invalid management key: {:?}", e))?;
-            key_array.zeroize();
+            bytes.zeroize();
             Ok(mgm)
         }
         None => {
             writeln!(
                 out,
-                "Warning: Using default management key (3DES). \
+                "Warning: Using default management key. \
                  Set {} or --mgm-key to use a custom key.",
                 ENV_MGM_KEY
             )?;
-            // Well-known default management key used by YubiKey factory settings.
-            let default_bytes: [u8; 24] = [
-                1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8,
-            ];
-            MgmKey::from_bytes(&default_bytes, None)
+            MgmKey::get_default(yubikey)
                 .map_err(|e| anyhow::anyhow!("Failed to construct default management key: {:?}", e))
         }
     }
@@ -520,6 +519,7 @@ fn build_cert_der(
         asn1::Asn1Time,
         bn::BigNum,
         hash::MessageDigest,
+        pkey::Id,
         x509::{X509Builder, X509NameBuilder},
     };
 
@@ -541,7 +541,13 @@ fn build_cert_der(
     cert_builder.set_not_before(&not_before)?;
     cert_builder.set_not_after(&not_after)?;
 
-    cert_builder.sign(pkey, MessageDigest::sha256())?;
+    // Ed25519 uses PureEdDSA (built-in hash); an external digest is not allowed.
+    let digest = if pkey.id() == Id::ED25519 {
+        MessageDigest::null()
+    } else {
+        MessageDigest::sha256()
+    };
+    cert_builder.sign(pkey, digest)?;
 
     let cert = cert_builder.build();
     Ok(cert.to_der()?)
@@ -597,7 +603,6 @@ impl CommandYubikey {
 
                 let slot_id = parse_slot(slot)?;
                 let reader_name = resolve_reader(reader.as_deref());
-                let mgm = resolve_mgm_key(mgm_key.as_deref(), out)?;
 
                 let cert_label = match label {
                     Some(l) => l.clone(),
@@ -627,6 +632,7 @@ impl CommandYubikey {
                     };
 
                     let mut yk = open_yubikey(reader_name)?;
+                    let mgm = resolve_mgm_key(mgm_key.as_deref(), &yk, out)?;
                     yk.authenticate(&mgm)
                         .map_err(|e| anyhow::anyhow!("Management key authentication failed: {:?}", e))?;
                     write_cert(&mut yk, slot_id, der)?;
@@ -743,7 +749,7 @@ impl CommandYubikeyImport {
                     )?;
                 }
 
-                let mgm = resolve_mgm_key(mgm_key.as_deref(), out)?;
+                let mgm = resolve_mgm_key(mgm_key.as_deref(), &yk, out)?;
                 yk.authenticate(&mgm)
                     .map_err(|e| anyhow::anyhow!("Management key authentication failed: {:?}", e))?;
 
@@ -890,7 +896,7 @@ impl CommandYubikeyImport {
                         )?;
                     }
 
-                    let mgm = resolve_mgm_key(mgm_key.as_deref(), out)?;
+                    let mgm = resolve_mgm_key(mgm_key.as_deref(), &yk, out)?;
                     yk.authenticate(&mgm)
                         .map_err(|e| anyhow::anyhow!("Management key authentication failed: {:?}", e))?;
 
