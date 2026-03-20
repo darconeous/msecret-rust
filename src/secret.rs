@@ -21,6 +21,9 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
+/// The standard in-memory secret type.
+///
+/// This is a simple wrapper around a 32-byte array, and provides the standard MSecret derivation methods.
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Secret(pub(crate) [u8; 32]);
 

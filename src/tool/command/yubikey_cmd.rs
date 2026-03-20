@@ -131,6 +131,10 @@ pub enum CommandYubikey {
         /// PC/SC reader name (substring match). Falls back to MSECRET_YUBIKEY_READER env var.
         #[arg(long)]
         reader: Option<String>,
+
+        /// Show all slots including empty retired key slots (82-95).
+        #[arg(long)]
+        all: bool,
     },
 
     /// Display YubiKey device information.
@@ -567,8 +571,9 @@ fn write_cert(yk: &mut YubiKey, slot: SlotId, der: Vec<u8>) -> Result<(), Error>
 
 fn print_slot_info<W: Write>(yk: &mut YubiKey, slot: SlotId, out: &mut W) -> Result<(), Error> {
     match Certificate::read(yk, slot) {
-        Ok(_cert) => {
-            writeln!(out, "  Slot {}: has certificate", slot_name(slot))?;
+        Ok(cert) => {
+            let subject = cert.cert.tbs_certificate().subject();
+            writeln!(out, "  Slot {}: {}", slot_name(slot), subject)?;
         }
         Err(_) => {
             writeln!(out, "  Slot {}: (empty)", slot_name(slot))?;
@@ -647,7 +652,7 @@ impl CommandYubikey {
                 Ok(())
             }
 
-            CommandYubikey::List { reader } => {
+            CommandYubikey::List { reader, all } => {
                 let reader_name = resolve_reader(reader.as_deref());
                 let mut yk = open_yubikey(reader_name)?;
 
@@ -665,6 +670,13 @@ impl CommandYubikey {
                     SlotId::CardAuthentication,
                 ] {
                     print_slot_info(&mut yk, *slot, out)?;
+                }
+
+                for b in 0x82u8..=0x95 {
+                    let slot = SlotId::Retired(RetiredSlotId::try_from(b).unwrap());
+                    if *all || Certificate::read(&mut yk, slot).is_ok() {
+                        print_slot_info(&mut yk, slot, out)?;
+                    }
                 }
 
                 Ok(())

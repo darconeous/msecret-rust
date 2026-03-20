@@ -56,6 +56,7 @@ pub use prime::*;
 
 mod tool_state;
 pub use tool_state::*;
+use zeroize::Zeroize;
 
 #[cfg(test)]
 mod tests;
@@ -127,13 +128,19 @@ pub trait Derivable:
     + Clone
     + Debug
 {
+    /// Returns the actual value of the secret. Depending on the backing,
+    /// this method may not be implemented, and may return an error if the
+    /// secret is not available.
     fn bytes(&self) -> Result<[u8; 32]>;
 
     /// Returns the secret identifier for this secret.
     fn id(&self) -> SecretId;
 }
 
-#[derive(Default, Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+/// The identifier for a secret.
+///
+/// This is a 16-byte value that is derived from the secret itself, and can be used to identify the secret without revealing any information about it.
+#[derive(Default, Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SecretId(pub(crate) [u8; SecretId::LEN]);
 
 impl SecretId {
