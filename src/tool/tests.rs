@@ -227,7 +227,7 @@ fn test_rsa() {
     let hashstr = hex::encode(sha2::Sha256::digest(output.as_slice()).as_slice());
     assert_eq!(
         hashstr.as_str(),
-        "b4126af3ebd6abc397ae7f1a31a0ed32f8a0dde66da34abb7b9b6ef55b1fb2fd"
+        "df1283bd8ca3c2dd90a3bffe71faba5c186471bd5a3b4e3b4727d8218e6307a0"
     );
     output.clear();
 
@@ -408,7 +408,7 @@ fn test_test_vectors() {
     let hashstr = hex::encode(sha2::Sha256::digest(output.as_slice()).as_slice());
     assert_eq!(
         hashstr.as_str(),
-        "a69fe609e8fa41de1272bc6d37ab1d9a7ceb93e7a6c600205fae72de1eddbc48"
+        "8c0e647632f931eff737849897c5b2b9b15ac2582437a47ef4115175c15aeb3d"
     );
     output.clear();
 }

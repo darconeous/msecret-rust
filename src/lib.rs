@@ -56,7 +56,6 @@ pub use prime::*;
 
 mod tool_state;
 pub use tool_state::*;
-use zeroize::Zeroize;
 
 #[cfg(test)]
 mod tests;

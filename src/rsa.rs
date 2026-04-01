@@ -250,12 +250,11 @@ impl ExtractRsaV1 for Secret {
         // Calculate N
         let n = &p * &q;
 
-        // Calculate D
-        let d = (&e)
-            .mod_inverse(&n - &p - &q + &one)
-            .unwrap()
-            .to_biguint()
-            .unwrap();
+        // Calculate D using Carmichael's totient: λ(n) = lcm(p-1, q-1)
+        let p1 = &p - &one;
+        let q1 = &q - &one;
+        let lambda_n = p1.lcm(&q1);
+        let d = (&e).mod_inverse(&lambda_n).unwrap().to_biguint().unwrap();
 
         let key = RsaPrivateKey::from_components(n, e, d, vec![p, q])?;
 
@@ -279,7 +278,6 @@ impl ExtractRsaV1 for Secret {
         // Temporary working "registers"
         let mut r0 = BigNum::new_secure()?;
         let mut r1 = BigNum::new_secure()?;
-        let mut r2 = BigNum::new_secure()?;
 
         // This is our subroutine which calculates
         // a suitable P or Q value, taking into account
@@ -339,34 +337,33 @@ impl ExtractRsaV1 for Secret {
         let mut n = BigNum::new_secure()?;
         n.checked_mul(&p, &q, &mut ctx)?;
 
-        // Calculate D
-        // n = p*q
-        // (p-1)(q-1) = p*q - p - q + 1
-        // (p-1)(q-1) = n - p - q + 1
-        // So we just subtract `p` and `q` from `n` and add one.
+        // Calculate D using Carmichael's totient: λ(n) = lcm(p-1, q-1)
+        // λ(n) = (p-1)(q-1) / gcd(p-1, q-1)
         let mut d = BigNum::new_secure()?;
-        // BN_sub(r0, rsa->n, rsa->p);
-        r0.checked_sub(&n, &p)?;
-        // BN_sub(r1, r0, rsa->q);
-        r1.checked_sub(&r0, &q)?;
-        // BN_add(r0, r1, BN_value_one());
-        r0.checked_add(&r1, &one)?;
-        // BN_mod_inverse(rsa->d, rsa->e, r0, ctx);
-        d.mod_inverse(&e, &r0, &mut ctx)?;
+        let mut p1 = BigNum::new_secure()?;
+        let mut q1 = BigNum::new_secure()?;
+        let mut gcd_pq = BigNum::new_secure()?;
+        let mut lambda_n = BigNum::new_secure()?;
+        // p1 = p - 1
+        p1.checked_sub(&p, &one)?;
+        // q1 = q - 1
+        q1.checked_sub(&q, &one)?;
+        // gcd_pq = gcd(p-1, q-1)
+        gcd_pq.gcd(&p1, &q1, &mut ctx)?;
+        // r0 = (p-1) * (q-1)
+        r0.checked_mul(&p1, &q1, &mut ctx)?;
+        // lambda_n = (p-1)(q-1) / gcd(p-1, q-1)
+        lambda_n.checked_div(&r0, &gcd_pq, &mut ctx)?;
+        // d = e^(-1) mod λ(n)
+        d.mod_inverse(&e, &lambda_n, &mut ctx)?;
 
         // Calculate DMP1
         let mut dmp1 = BigNum::new_secure()?;
-        // BN_sub(r1, rsa->p, BN_value_one());
-        r1.checked_sub(&p, &one)?;
-        // BN_mod(rsa->dmp1,rsa->d,r1,ctx);
-        dmp1.nnmod(&d, &r1, &mut ctx)?;
+        dmp1.nnmod(&d, &p1, &mut ctx)?;
 
         // Calculate DMQ1
         let mut dmq1 = BigNum::new_secure()?;
-        // BN_sub(r2, rsa->q, BN_value_one());
-        r2.checked_sub(&q, &one)?;
-        // BN_mod(rsa->dmq1,rsa->d,r2,ctx);
-        dmq1.nnmod(&d, &r2, &mut ctx)?;
+        dmq1.nnmod(&d, &q1, &mut ctx)?;
 
         // Calculate IQMP
         let mut iqmp = BigNum::new_secure()?;
@@ -629,7 +626,7 @@ mod tests {
         let hash = hex::encode(hash.finalize().as_slice());
         assert_eq!(
             hash,
-            "491905bc4318716c1c84f2d0daa090820231b6a819af2dbcc36f5e3565d0ab93"
+            "cbb303ec8f87c88dc8207ebedb98ee12ff5830f92575d4649f708973b488cf8d"
         );
     }
 
@@ -653,7 +650,7 @@ mod tests {
         let hash = hex::encode(hash.finalize().as_slice());
         assert_eq!(
             hash,
-            "491905bc4318716c1c84f2d0daa090820231b6a819af2dbcc36f5e3565d0ab93"
+            "cbb303ec8f87c88dc8207ebedb98ee12ff5830f92575d4649f708973b488cf8d"
         );
     }
 
@@ -679,7 +676,7 @@ mod tests {
         let hash = hex::encode(hash.finalize().as_slice());
         assert_eq!(
             hash,
-            "27259c9b55d85aa1b60259308c7e802a7c13cf94fb4e74f10db4b6d1f17727e9"
+            "e86f8f9b4d8a1486479a40e7eae57eed5276076b601521675e5be90e3cb78596"
         );
     }
 
@@ -703,7 +700,7 @@ mod tests {
         let hash = hex::encode(hash.finalize().as_slice());
         assert_eq!(
             hash,
-            "27259c9b55d85aa1b60259308c7e802a7c13cf94fb4e74f10db4b6d1f17727e9"
+            "e86f8f9b4d8a1486479a40e7eae57eed5276076b601521675e5be90e3cb78596"
         );
     }
 
@@ -720,7 +717,7 @@ mod tests {
         hasher.update(pem_str.as_bytes());
         assert_eq!(
             hex::encode(hasher.finalize()),
-            "223e90c069eb29b25fd5d3b4fbf0667dcb480b95fa9f429e8f8631c5eb78e6ae".to_string()
+            "8b4d39d6533cf7a60348cae02d338780fa0ac717711e1c9b6455618d55a0332d".to_string()
         );
     }
 
